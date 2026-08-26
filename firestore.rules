@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if request comes from an authenticated user
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: Check if request email matches the document owner
+    function isOwner(email) {
+      return isSignedIn() && request.auth.token.email.toLowerCase() == email.toLowerCase();
+    }
+
+    // Helper: Check if user is a Master Admin or authorized Assistant listed in admin_users
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.toLowerCase() == 'adityapatil.4132@gmail.com' ||
+        request.auth.token.email.toLowerCase() == 'admin@apex.edu' ||
+        exists(/databases/$(database)/documents/admin_users/$(request.auth.token.email.toLowerCase()))
+      );
+    }
+
+    // -------------------------------------------------------------
+    // 1. APPLICATIONS COLLECTION
+    // -------------------------------------------------------------
+    match /applications/{appId} {
+      // Students can create an application for themselves
+      allow create: if isSignedIn() && request.resource.data.email.toLowerCase() == request.auth.token.email.toLowerCase();
+      // Students can view/update only their own application; Admins can view/update all
+      allow read, update: if isAdmin() || (isSignedIn() && resource.data.email.toLowerCase() == request.auth.token.email.toLowerCase());
+      // Only admins can delete applications
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 2. STUDENT PROFILES COLLECTION (Keyed by student email)
+    // -------------------------------------------------------------
+    match /profiles/{email} {
+      // Students can manage their own profile; Admins can inspect/manage all
+      allow read, write: if isAdmin() || isOwner(email);
+    }
+
+    // -------------------------------------------------------------
+    // 3. ADMIN USERS & ASSISTANTS COLLECTION
+    // -------------------------------------------------------------
+    match /admin_users/{email} {
+      // Authenticated users can read admin user list to verify authority
+      allow read: if isSignedIn();
+      // Only authorized admins can create, update, or revoke staff/assistant accounts
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 4. SITE CONTENT (CMS)
+    // -------------------------------------------------------------
+    match /site_content/{docId} {
+      // Public site visitors can read CMS content
+      allow read: if true;
+      // Only admins can modify website hero, stats, and campus facility text
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 5. ACADEMIC PROGRAMS CATALOG
+    // -------------------------------------------------------------
+    match /programs/{progId} {
+      // Public site visitors can view degree catalog
+      allow read: if true;
+      // Only admins can add, edit, or delete degree programs
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // DEFAULT DENY ALL OTHER COLLECTIONS & DOCUMENTS
+    // -------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
