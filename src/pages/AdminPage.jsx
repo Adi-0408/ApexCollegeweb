@@ -37,7 +37,12 @@ import {
   ChevronDown,
   Home,
   CheckCircle2,
-  Shield
+  Shield,
+  UserPlus,
+  Key,
+  ShieldAlert,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import {
   auth,
@@ -52,7 +57,8 @@ import {
   deleteDoc,
   doc,
   query,
-  orderBy
+  orderBy,
+  createAssistantUser
 } from '../lib/firebase.js';
 import {
   getSiteContent,
@@ -64,10 +70,12 @@ import {
 } from '../lib/siteData.js';
 import { sendApplicationStatusEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
-import { ADMIN_EMAILS } from '../context/AuthContext.jsx';
+import { useAuth, DEFAULT_ADMIN_EMAILS } from '../context/AuthContext.jsx';
+import emailjs from '@emailjs/browser';
 
 export default function AdminPage() {
   const { showToast } = useToast();
+  const { currentUser, adminEmails } = useAuth();
   const navigate = useNavigate();
   const [unlocked, setUnlocked] = useState(false);
   const [adminEmail, setAdminEmail] = useState('adityapatil.4132@gmail.com');
@@ -100,12 +108,23 @@ export default function AdminPage() {
   const [cmsSaving, setCmsSaving] = useState(false);
   const [facilities, setFacilities] = useState([]);
 
+  // Staff & Assistants Management
+  const [assistants, setAssistants] = useState([]);
+  const [asstLoading, setAsstLoading] = useState(false);
+  const [asstName, setAsstName] = useState('');
+  const [asstEmail, setAsstEmail] = useState('');
+  const [asstPass, setAsstPass] = useState('');
+  const [asstRole, setAsstRole] = useState('Admissions Assistant');
+  const [asstSaving, setAsstSaving] = useState(false);
+  const [showPassMap, setShowPassMap] = useState({});
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      const allowedEmails = adminEmails && adminEmails.length > 0 ? adminEmails : DEFAULT_ADMIN_EMAILS;
       if (
         user &&
         user.email &&
-        ADMIN_EMAILS.includes(user.email.toLowerCase()) &&
+        allowedEmails.includes(user.email.toLowerCase()) &&
         sessionStorage.getItem('adminUnlocked') === 'true'
       ) {
         setUnlocked(true);
@@ -115,21 +134,17 @@ export default function AdminPage() {
       }
     });
     return unsub;
-  }, []);
+  }, [adminEmails]);
 
   async function handleAdminLogin(e) {
     e.preventDefault();
     setLoginLoading(true);
     try {
       await signInWithEmailAndPassword(auth, adminEmail.trim(), adminPass);
-      if (ADMIN_EMAILS.includes(adminEmail.trim().toLowerCase())) {
-        sessionStorage.setItem('adminUnlocked', 'true');
-        setUnlocked(true);
-        loadAdminData();
-        showToast('Welcome Admin! Dashboard unlocked.');
-      } else {
-        showToast('Access Denied: Not an admin account.', 'error');
-      }
+      sessionStorage.setItem('adminUnlocked', 'true');
+      setUnlocked(true);
+      loadAdminData();
+      showToast('Welcome Admin! Dashboard unlocked.');
     } catch (err) {
       showToast('Invalid admin credentials: ' + err.message.replace('Firebase: ', ''), 'error');
     } finally {
@@ -154,6 +169,7 @@ export default function AdminPage() {
     loadApplications();
     loadPrograms();
     loadCms();
+    loadAssistants();
   }
 
   async function loadApplications() {
@@ -338,6 +354,70 @@ export default function AdminPage() {
     setFacilities((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  // Assistant & Staff Management Functions
+  async function loadAssistants() {
+    setAsstLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'admin_users'));
+      const list = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      setAssistants(list);
+    } catch (err) {
+      console.warn('Failed to load assistants:', err);
+    } finally {
+      setAsstLoading(false);
+    }
+  }
+
+  async function handleCreateAssistant(e) {
+    e.preventDefault();
+    if (!asstEmail.trim() || !asstPass.trim()) {
+      showToast('Please enter assistant email and password.', 'error');
+      return;
+    }
+    if (asstPass.length < 6) {
+      showToast('Password must be at least 6 characters.', 'error');
+      return;
+    }
+    setAsstSaving(true);
+    try {
+      await createAssistantUser(
+        asstEmail.trim(),
+        asstPass.trim(),
+        asstName.trim(),
+        asstRole.trim(),
+        currentUser?.email || 'Master Admin'
+      );
+      showToast(`Assistant account created! Email: ${asstEmail.trim()} | Pass: ${asstPass.trim()}`);
+      setAsstName('');
+      setAsstEmail('');
+      setAsstPass('');
+      setAsstRole('Admissions Assistant');
+      await loadAssistants();
+    } catch (err) {
+      showToast('Failed to create assistant account: ' + err.message.replace('Firebase: ', ''), 'error');
+    } finally {
+      setAsstSaving(false);
+    }
+  }
+
+  async function handleRevokeAssistant(emailDocId) {
+    if (!confirm(`Are you sure you want to revoke admin authority for ${emailDocId}?`)) return;
+    try {
+      await deleteDoc(doc(db, 'admin_users', emailDocId));
+      showToast('Assistant access revoked.');
+      await loadAssistants();
+    } catch (err) {
+      showToast('Failed to revoke access: ' + err.message, 'error');
+    }
+  }
+
+  function togglePassVisibility(id) {
+    setShowPassMap((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
   async function openStudentProfile(app) {
     let combinedData = { ...app };
     if (app.email) {
@@ -374,11 +454,13 @@ export default function AdminPage() {
   const pendingCount = applications.filter((a) => !a.status || a.status.toLowerCase() === 'pending').length;
   const rejectedCount = applications.filter((a) => (a.status || '').toLowerCase() === 'rejected').length;
   const programsCount = programs.length;
+  const assistantsCount = assistants.length;
 
   const tabs = [
     { key: 'applications', label: 'Candidate Admissions', icon: <Users className="w-4 h-4" />, count: totalAppsCount },
     { key: 'programs', label: 'Degree Majors', icon: <BookOpen className="w-4 h-4" />, count: programsCount },
     { key: 'cms', label: 'Website CMS', icon: <LayoutTemplate className="w-4 h-4" /> },
+    { key: 'assistants', label: 'Staff & Assistants', icon: <UserPlus className="w-4 h-4" />, count: assistantsCount },
   ];
 
   // Helper to split program string nicely
@@ -411,16 +493,17 @@ export default function AdminPage() {
               Administrative Control
             </span>
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 pt-1">Executive Console</h2>
-            <p className="text-xs text-slate-500">Sign in with university administrator credentials</p>
+            <p className="text-xs text-slate-500">Sign in with administrator or staff credentials</p>
           </div>
           <form onSubmit={handleAdminLogin} className="space-y-4 text-left pt-2">
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Admin Email</label>
+              <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Admin / Staff Email</label>
               <input
                 type="email"
                 required
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="admin@apex.edu"
                 className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition shadow-sm font-medium"
               />
             </div>
@@ -468,7 +551,7 @@ export default function AdminPage() {
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-indigo-200/80 mt-0.5 font-medium">
-              Review applicant portfolios, manage catalog, and update CMS content.
+              Logged in as <strong className="text-white">{currentUser?.email}</strong> • Management &amp; Staff Console
             </p>
           </div>
         </div>
@@ -518,12 +601,12 @@ export default function AdminPage() {
 
         <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600">Pending</span>
-            <h3 className="text-xl sm:text-3xl font-black text-amber-600">{pendingCount}</h3>
-            <p className="text-[10px] sm:text-[11px] text-amber-600/80 font-medium truncate">In Review</p>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600">Staff &amp; Assistants</span>
+            <h3 className="text-xl sm:text-3xl font-black text-indigo-600">{assistantsCount}</h3>
+            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate">Active Team Users</p>
           </div>
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-50 text-amber-600 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-50 text-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+            <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
@@ -634,7 +717,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* MOBILE CANDIDATE CARDS (Visible on small screens) */}
+            {/* MOBILE CANDIDATE CARDS */}
             <div className="block md:hidden divide-y divide-slate-100">
               {appsLoading ? (
                 <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2">
@@ -747,7 +830,7 @@ export default function AdminPage() {
               )}
             </div>
 
-            {/* DESKTOP CANDIDATE TABLE (Clean, spacious, high-end design) */}
+            {/* DESKTOP CANDIDATE TABLE */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -777,7 +860,6 @@ export default function AdminPage() {
                         <div className="space-y-2">
                           <Users className="w-8 h-8 text-slate-300 mx-auto" />
                           <p className="font-semibold text-slate-600">No candidate applications matching your search.</p>
-                          <p className="text-[11px] text-slate-400">Try changing filter pills or clearing the search bar.</p>
                         </div>
                       </td>
                     </tr>
@@ -944,7 +1026,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* STUDENT PROFILE DEEP-INSPECTOR MODAL (Redesigned & Responsive) */}
+          {/* STUDENT PROFILE DEEP-INSPECTOR MODAL */}
           {selectedStudentProfile && (
             <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in">
               <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full my-auto overflow-hidden flex flex-col max-h-[92vh]">
@@ -961,7 +1043,6 @@ export default function AdminPage() {
                   </button>
 
                   <div className="flex items-center gap-4 sm:gap-5 pr-10">
-                    {/* Fixed Constrained Avatar */}
                     <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden ring-4 ring-white/15 shadow-2xl shrink-0 bg-slate-800 border border-white/20 flex items-center justify-center">
                       {selectedStudentProfile.avatarUrl ? (
                         <img
@@ -1007,8 +1088,6 @@ export default function AdminPage() {
 
                 {/* Modal Scrollable Body */}
                 <div className="p-5 sm:p-7 space-y-5 overflow-y-auto flex-grow text-xs text-slate-700">
-                  
-                  {/* Bio & Identity Records */}
                   <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-2.5 shadow-2xs">
                     <p className="font-extrabold text-indigo-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5" /> Identity &amp; Contact Records
@@ -1041,7 +1120,6 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Permanent Residential Address */}
                   <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-2 shadow-2xs">
                     <p className="font-extrabold text-indigo-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5" /> Permanent Residential Address
@@ -1056,7 +1134,6 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Emergency Guardian Contact */}
                   <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-2.5 shadow-2xs">
                     <p className="font-extrabold text-rose-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <HeartPulse className="w-3.5 h-3.5" /> Emergency &amp; Guardian Contact
@@ -1081,7 +1158,6 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Academic & Housing Status */}
                   <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-2.5 shadow-2xs">
                     <p className="font-extrabold text-indigo-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <GraduationCap className="w-3.5 h-3.5" /> Academic History &amp; Campus Preferences
@@ -1106,7 +1182,6 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Scheduled Appointment */}
                   {selectedStudentProfile.appointmentDate && (
                     <div className="bg-indigo-50/60 p-4 sm:p-5 rounded-2xl border border-indigo-100 space-y-2 shadow-2xs">
                       <p className="font-extrabold text-indigo-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -1503,6 +1578,200 @@ export default function AdminPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* TAB 4: STAFF & ASSISTANT USER AUTHORITY MANAGEMENT */}
+      {activeTab === 'assistants' && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          {/* Header & Explanatory Card */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 relative z-10 max-w-2xl">
+              <span className="bg-indigo-500/20 text-indigo-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-indigo-500/30 inline-block">
+                Staff &amp; Assistant User Management
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black text-white">Delegate Admin Authority</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Create assistant accounts for your team members. Provide them with the Email and Password below so they can log into the Admin Console to review applications, schedule verification interviews, and manage catalog data.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0 relative z-10 shadow-lg">
+              <UserPlus className="w-8 h-8" />
+            </div>
+          </div>
+
+          {/* Create Assistant Form Card */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-2 text-indigo-600 border-b pb-4">
+              <UserPlus className="w-5 h-5" />
+              <h3 className="text-base sm:text-lg font-black text-slate-900">Create New Assistant Account</h3>
+            </div>
+
+            <form onSubmit={handleCreateAssistant} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assistant Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={asstName}
+                    onChange={(e) => setAsstName(e.target.value)}
+                    placeholder="e.g. Rahul Sharma"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Role Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={asstRole}
+                    onChange={(e) => setAsstRole(e.target.value)}
+                    placeholder="e.g. Admissions Coordinator"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assistant Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={asstEmail}
+                    onChange={(e) => setAsstEmail(e.target.value)}
+                    placeholder="assistant@apex.edu"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assign Password * (Min 6 chars)</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={6}
+                    value={asstPass}
+                    onChange={(e) => setAsstPass(e.target.value)}
+                    placeholder="e.g. pass123456"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-[11px] text-slate-500 font-medium italic">
+                  💡 Note: Share these credentials with the assistant so they can access the Admin Console.
+                </p>
+                <button
+                  type="submit"
+                  disabled={asstSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-7 py-3 rounded-xl text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition flex items-center gap-2 disabled:opacity-60"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>{asstSaving ? 'Registering Account...' : 'Create Assistant Account'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Active Assistant Staff Roster */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Shield className="w-5 h-5" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900">Active Authorized Assistant Staff ({assistants.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={loadAssistants}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${asstLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh List</span>
+              </button>
+            </div>
+
+            {asstLoading ? (
+              <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
+                <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
+                <span>Loading assistant staff roster...</span>
+              </div>
+            ) : assistants.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                <UserPlus className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No Assistant Accounts Created Yet</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Use the form above to add assistants (e.g. staff members, admissions coordinators) who can help manage candidate applications.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {assistants.map((asst) => (
+                  <div
+                    key={asst.id}
+                    className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between hover:border-indigo-200 transition"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
+                          {asst.name ? asst.name[0].toUpperCase() : 'A'}
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="font-black text-slate-900 text-base">{asst.name || 'Assistant User'}</h4>
+                          <span className="text-[10px] font-extrabold uppercase text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-100 inline-block">
+                            {asst.role || 'Admissions Assistant'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2.5 py-1 rounded-full uppercase flex items-center gap-1 shrink-0">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        Active Admin
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 text-[11px]">Assistant Email:</span>
+                        <strong className="text-slate-900 font-mono text-xs">{asst.email}</strong>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 text-[11px]">Assigned Password:</span>
+                        <div className="flex items-center gap-1.5">
+                          <strong className="text-slate-900 font-mono text-xs">
+                            {showPassMap[asst.id] ? asst.initialPassword || '******' : '••••••••'}
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => togglePassVisibility(asst.id)}
+                            className="text-slate-400 hover:text-slate-700 p-0.5"
+                            title="Toggle password view"
+                          >
+                            {showPassMap[asst.id] ? <Lock className="w-3 h-3 text-indigo-600" /> : <Unlock className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px] text-slate-400">
+                        <span>Created by: {asst.createdBy || 'Admin'}</span>
+                        <span>{asst.createdAt?.toDate ? asst.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeAssistant(asst.id)}
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-4 py-2 rounded-xl border border-rose-200 transition flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Revoke Admin Access</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </main>
   );

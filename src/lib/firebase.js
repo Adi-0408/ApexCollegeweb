@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
   createUserWithEmailAndPassword,
@@ -37,10 +37,35 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Secondary app instance for creating assistant user accounts without disturbing active admin session
+const secondaryApp = getApps().find(a => a.name === 'SecondaryAdminApp') || initializeApp(firebaseConfig, 'SecondaryAdminApp');
+const secondaryAuth = getAuth(secondaryApp);
+
+export async function createAssistantUser(email, password, name, role, createdByEmail) {
+  const cleanEmail = email.trim().toLowerCase();
+  
+  // 1. Create in Firebase Auth using secondary auth instance
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
+  
+  // 2. Save metadata & role in Firestore 'admin_users' collection
+  await setDoc(doc(db, 'admin_users', cleanEmail), {
+    email: cleanEmail,
+    name: name?.trim() || 'Assistant User',
+    role: role?.trim() || 'Admissions Assistant',
+    initialPassword: password, // Stored so primary admin can reference/share credentials
+    active: true,
+    createdBy: createdByEmail || 'Admin',
+    createdAt: serverTimestamp(),
+  });
+
+  return cred;
+}
+
 export {
   app,
   auth,
   db,
+  firebaseConfig,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,

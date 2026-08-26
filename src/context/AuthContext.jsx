@@ -3,17 +3,40 @@ import { auth, db, onAuthStateChanged, collection, query, where, onSnapshot } fr
 
 const AuthContext = createContext(null);
 
-export const ADMIN_EMAILS = ['admin@apex.edu', 'adityapatil.4132@gmail.com'];
+export const DEFAULT_ADMIN_EMAILS = ['admin@apex.edu', 'adityapatil.4132@gmail.com'];
+export const ADMIN_EMAILS = DEFAULT_ADMIN_EMAILS;
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = initial loading
   const [studentApplication, setStudentApplication] = useState(null);
   const [appStatus, setAppStatus] = useState(null);
   const [isAccepted, setIsAccepted] = useState(false);
+  const [adminEmails, setAdminEmails] = useState(DEFAULT_ADMIN_EMAILS);
 
+  // Dynamic admin check against default admins + Firestore staff collection
   const isAdmin = !!(
-    currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())
+    currentUser?.email && adminEmails.includes(currentUser.email.toLowerCase())
   );
+
+  // Subscribe to real-time created assistant accounts in Firestore
+  useEffect(() => {
+    const unsubAssistants = onSnapshot(
+      collection(db, 'admin_users'),
+      (snap) => {
+        const assistantEmails = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.active !== false && data.email) {
+            assistantEmails.push(data.email.toLowerCase());
+          }
+        });
+        const combined = Array.from(new Set([...DEFAULT_ADMIN_EMAILS, ...assistantEmails]));
+        setAdminEmails(combined);
+      },
+      (err) => console.warn('Admin users listener warning:', err)
+    );
+    return () => unsubAssistants();
+  }, []);
 
   useEffect(() => {
     let appUnsub = null;
@@ -65,6 +88,7 @@ export function AuthProvider({ children }) {
         currentUser,
         isAuthenticated: !!currentUser,
         isAdmin,
+        adminEmails,
         isAccepted,
         appStatus,
         studentApplication
