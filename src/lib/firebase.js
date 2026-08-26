@@ -1,0 +1,61 @@
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  setDoc,
+  deleteDoc,
+  getDoc,
+  onSnapshot,
+  doc,
+  serverTimestamp,
+  query,
+  where,
+  orderBy
+} from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCvK8aO3KXlh2GO6d-lMpPej5OoqA-aDSI",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "aura-college.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "aura-college",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "aura-college.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "725592116067",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:725592116067:web:f3e1dcc000e8de74f92156",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-6W99CWB5WC"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+export {
+  app,
+  auth,
+  db,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  setDoc,
+  deleteDoc,
+  getDoc,
+  onSnapshot,
+  doc,
+  serverTimestamp,
+  query,
+  where,
+  orderBy
+};
