@@ -124,9 +124,9 @@ export default function AdminPage() {
       if (
         user &&
         user.email &&
-        allowedEmails.includes(user.email.toLowerCase()) &&
-        sessionStorage.getItem('adminUnlocked') === 'true'
+        allowedEmails.includes(user.email.toLowerCase())
       ) {
+        sessionStorage.setItem('adminUnlocked', 'true');
         setUnlocked(true);
         loadAdminData();
       } else {
@@ -1074,7 +1074,7 @@ export default function AdminPage() {
                           {selectedStudentProfile.program}
                         </span>
                         <span className="text-[11px] text-slate-300 font-mono bg-white/10 px-2 py-0.5 rounded-md">
-                          Ref #{selectedStudentProfile.id.slice(0, 8).toUpperCase()}
+                          Ref #{selectedStudentProfile?.id ? selectedStudentProfile.id.slice(0, 8).toUpperCase() : 'STUDENT-BIO'}
                         </span>
                       </div>
 

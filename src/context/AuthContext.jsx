@@ -18,31 +18,14 @@ export function AuthProvider({ children }) {
     currentUser?.email && adminEmails.includes(currentUser.email.toLowerCase())
   );
 
-  // Subscribe to real-time created assistant accounts in Firestore
-  useEffect(() => {
-    const unsubAssistants = onSnapshot(
-      collection(db, 'admin_users'),
-      (snap) => {
-        const assistantEmails = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          if (data.active !== false && data.email) {
-            assistantEmails.push(data.email.toLowerCase());
-          }
-        });
-        const combined = Array.from(new Set([...DEFAULT_ADMIN_EMAILS, ...assistantEmails]));
-        setAdminEmails(combined);
-      },
-      (err) => console.warn('Admin users listener warning:', err)
-    );
-    return () => unsubAssistants();
-  }, []);
-
   useEffect(() => {
     let appUnsub = null;
+    let asstUnsub = null;
+
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user && user.email) {
+        // 1. Student Application Listener
         const q = query(collection(db, 'applications'), where('email', '==', user.email));
         appUnsub = onSnapshot(
           q,
@@ -69,16 +52,37 @@ export function AuthProvider({ children }) {
           },
           (err) => console.warn('AuthContext apps listener:', err)
         );
+
+        // 2. Staff/Assistant Users Listener (Runs safely when user is signed in)
+        asstUnsub = onSnapshot(
+          collection(db, 'admin_users'),
+          (snap) => {
+            const assistantEmails = [];
+            snap.forEach((d) => {
+              const data = d.data();
+              if (data.active !== false && data.email) {
+                assistantEmails.push(data.email.toLowerCase());
+              }
+            });
+            const combined = Array.from(new Set([...DEFAULT_ADMIN_EMAILS, ...assistantEmails]));
+            setAdminEmails(combined);
+          },
+          (err) => console.warn('Admin users listener warning:', err)
+        );
       } else {
         if (appUnsub) appUnsub();
+        if (asstUnsub) asstUnsub();
         setStudentApplication(null);
         setAppStatus(null);
         setIsAccepted(false);
+        setAdminEmails(DEFAULT_ADMIN_EMAILS);
       }
     });
+
     return () => {
       unsub();
       if (appUnsub) appUnsub();
+      if (asstUnsub) asstUnsub();
     };
   }, []);
 

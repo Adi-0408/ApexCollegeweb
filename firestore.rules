@@ -4,20 +4,27 @@ service cloud.firestore {
 
     // Helper: Check if request comes from an authenticated user
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token != null;
+    }
+
+    // Helper: Safely retrieve lowercase email from auth token
+    function getUserEmail() {
+      return (isSignedIn() && 'email' in request.auth.token && request.auth.token.email != null) 
+        ? request.auth.token.email.toLowerCase() 
+        : '';
     }
 
     // Helper: Check if request email matches the document owner
     function isOwner(email) {
-      return isSignedIn() && request.auth.token.email.toLowerCase() == email.toLowerCase();
+      return isSignedIn() && getUserEmail() == email.toLowerCase();
     }
 
     // Helper: Check if user is a Master Admin or authorized Assistant listed in admin_users
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email.toLowerCase() == 'adityapatil.4132@gmail.com' ||
-        request.auth.token.email.toLowerCase() == 'admin@apex.edu' ||
-        exists(/databases/$(database)/documents/admin_users/$(request.auth.token.email.toLowerCase()))
+        getUserEmail() == 'adityapatil.4132@gmail.com' ||
+        getUserEmail() == 'admin@apex.edu' ||
+        (getUserEmail() != '' && exists(/databases/$(database)/documents/admin_users/$(getUserEmail())))
       );
     }
 
@@ -26,9 +33,9 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /applications/{appId} {
       // Students can create an application for themselves
-      allow create: if isSignedIn() && request.resource.data.email.toLowerCase() == request.auth.token.email.toLowerCase();
+      allow create: if isSignedIn() && request.resource.data.email.toLowerCase() == getUserEmail();
       // Students can view/update only their own application; Admins can view/update all
-      allow read, update: if isAdmin() || (isSignedIn() && resource.data.email.toLowerCase() == request.auth.token.email.toLowerCase());
+      allow read, update: if isAdmin() || (isSignedIn() && resource.data.email.toLowerCase() == getUserEmail());
       // Only admins can delete applications
       allow delete: if isAdmin();
     }
