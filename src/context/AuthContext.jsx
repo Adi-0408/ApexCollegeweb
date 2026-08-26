@@ -3,6 +3,8 @@ import { auth, db, onAuthStateChanged, collection, query, where, onSnapshot } fr
 
 const AuthContext = createContext(null);
 
+export const ADMIN_EMAILS = ['admin@apex.edu', 'adityapatil.4132@gmail.com'];
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = initial loading
   const [studentApplication, setStudentApplication] = useState(null);
@@ -10,7 +12,7 @@ export function AuthProvider({ children }) {
   const [isAccepted, setIsAccepted] = useState(false);
 
   const isAdmin = !!(
-    currentUser?.email && currentUser.email.toLowerCase() === 'admin@apex.edu'
+    currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())
   );
 
   useEffect(() => {

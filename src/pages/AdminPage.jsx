@@ -64,12 +64,13 @@ import {
 } from '../lib/siteData.js';
 import { sendApplicationStatusEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { ADMIN_EMAILS } from '../context/AuthContext.jsx';
 
 export default function AdminPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [unlocked, setUnlocked] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('admin@apex.edu');
+  const [adminEmail, setAdminEmail] = useState('adityapatil.4132@gmail.com');
   const [adminPass, setAdminPass] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -104,7 +105,7 @@ export default function AdminPage() {
       if (
         user &&
         user.email &&
-        user.email.toLowerCase() === 'admin@apex.edu' &&
+        ADMIN_EMAILS.includes(user.email.toLowerCase()) &&
         sessionStorage.getItem('adminUnlocked') === 'true'
       ) {
         setUnlocked(true);
@@ -121,7 +122,7 @@ export default function AdminPage() {
     setLoginLoading(true);
     try {
       await signInWithEmailAndPassword(auth, adminEmail.trim(), adminPass);
-      if (adminEmail.trim().toLowerCase() === 'admin@apex.edu') {
+      if (ADMIN_EMAILS.includes(adminEmail.trim().toLowerCase())) {
         sessionStorage.setItem('adminUnlocked', 'true');
         setUnlocked(true);
         loadAdminData();
@@ -130,7 +131,7 @@ export default function AdminPage() {
         showToast('Access Denied: Not an admin account.', 'error');
       }
     } catch (err) {
-      showToast('Invalid admin credentials.', 'error');
+      showToast('Invalid admin credentials: ' + err.message.replace('Firebase: ', ''), 'error');
     } finally {
       setLoginLoading(false);
     }

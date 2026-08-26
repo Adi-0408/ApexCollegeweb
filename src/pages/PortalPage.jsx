@@ -52,6 +52,7 @@ import {
 import { getProgramsList, subscribePrograms } from '../lib/siteData.js';
 import { sendApplicationSubmissionEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { ADMIN_EMAILS } from '../context/AuthContext.jsx';
 
 export default function PortalPage() {
   const { showToast } = useToast();
@@ -138,7 +139,7 @@ export default function PortalPage() {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
-        if (user.email && user.email.toLowerCase() === 'admin@apex.edu') {
+        if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
           if (sessionStorage.getItem('adminUnlocked') === 'true') {
             navigate('/admin');
             return;
@@ -746,7 +747,7 @@ export default function PortalPage() {
       )}
 
       {/* DASHBOARD (When Logged In as Student) */}
-      {currentUser && currentUser.email && currentUser.email.toLowerCase() === 'admin@apex.edu' ? (
+      {currentUser && currentUser.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase()) ? (
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl flex flex-col md:flex-row justify-between items-center gap-6 animate-in fade-in">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0">
