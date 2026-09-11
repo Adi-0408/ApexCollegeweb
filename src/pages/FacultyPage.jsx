@@ -21,7 +21,12 @@ import {
   Sparkles,
   ShieldCheck,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  CalendarDays,
+  Plus,
+  Trash2,
+  Edit3,
+  PlusCircle
 } from 'lucide-react';
 import {
   auth,
@@ -40,7 +45,7 @@ import {
 } from '../lib/firebase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { markCourseAttendance, saveStudentResults, getFacultyList } from '../lib/academicData.js';
+import { markCourseAttendance, saveStudentResults, getFacultyList, getStudentTimetable, saveTimetable } from '../lib/academicData.js';
 
 export default function FacultyPage() {
   const { currentUser, isAdmin } = useAuth();
@@ -76,13 +81,41 @@ export default function FacultyPage() {
   const [facultyProfile, setFacultyProfile] = useState(null);
   const [facultySubjects, setFacultySubjects] = useState([]);
 
+  // Timetable Builder States
+  const [timetableList, setTimetableList] = useState([]);
+  const [ttLoading, setTtLoading] = useState(false);
+  const [savingTt, setSavingTt] = useState(false);
+  const [selectedTtDay, setSelectedTtDay] = useState('Monday');
+
+  // Slot Form State
+  const [slotDay, setSlotDay] = useState('Monday');
+  const [slotTime, setSlotTime] = useState('09:00 AM - 10:30 AM');
+  const [slotSubject, setSlotSubject] = useState('');
+  const [slotRoom, setSlotRoom] = useState('Lab 101');
+  const [slotType, setSlotType] = useState('Lecture');
+  const [slotFaculty, setSlotFaculty] = useState('');
+  const [editingSlotIdx, setEditingSlotIdx] = useState(null);
+
   useEffect(() => {
     if (currentUser) {
       loadEnrolledStudents();
       loadFaculty();
       loadFacultyProfile();
+      loadTimetableData();
     }
   }, [currentUser]);
+
+  async function loadTimetableData() {
+    setTtLoading(true);
+    try {
+      const data = await getStudentTimetable();
+      setTimetableList(data);
+    } catch (err) {
+      console.warn('loadTimetableData warning:', err);
+    } finally {
+      setTtLoading(false);
+    }
+  }
 
   async function loadFacultyProfile() {
     if (!currentUser?.email) return;
@@ -92,6 +125,7 @@ export default function FacultyPage() {
       if (snap.exists()) {
         const data = snap.data();
         setFacultyProfile(data);
+        if (data.name) setSlotFaculty(data.name);
         let subjects = [];
         if (Array.isArray(data.assignedSubjects) && data.assignedSubjects.length > 0) {
           subjects = data.assignedSubjects;
@@ -101,10 +135,65 @@ export default function FacultyPage() {
         if (subjects.length > 0) {
           setFacultySubjects(subjects);
           setSelectedSubject(subjects[0]);
+          setSlotSubject(subjects[0]);
         }
       }
     } catch (err) {
       console.warn('loadFacultyProfile warning:', err);
+    }
+  }
+
+  function handleAddOrUpdateSlot(e) {
+    e.preventDefault();
+    const sub = slotSubject || (facultySubjects[0] || 'CS101 - Computer Science');
+    const fac = slotFaculty || (facultyProfile?.name || 'Faculty Instructor');
+
+    const newSlot = {
+      day: slotDay,
+      time: slotTime,
+      subject: sub,
+      room: slotRoom,
+      type: slotType,
+      faculty: fac
+    };
+
+    if (editingSlotIdx !== null) {
+      const updated = [...timetableList];
+      updated[editingSlotIdx] = newSlot;
+      setTimetableList(updated);
+      setEditingSlotIdx(null);
+      showToast('Timetable slot updated!');
+    } else {
+      setTimetableList((prev) => [...prev, newSlot]);
+      showToast('New slot added to timetable!');
+    }
+  }
+
+  function handleEditSlot(idx) {
+    const slot = timetableList[idx];
+    setSlotDay(slot.day || 'Monday');
+    setSlotTime(slot.time || '09:00 AM - 10:30 AM');
+    setSlotSubject(slot.subject || '');
+    setSlotRoom(slot.room || 'Lab 101');
+    setSlotType(slot.type || 'Lecture');
+    setSlotFaculty(slot.faculty || '');
+    setEditingSlotIdx(idx);
+  }
+
+  function handleDeleteSlot(idx) {
+    setTimetableList((prev) => prev.filter((_, i) => i !== idx));
+    showToast('Slot removed from timetable.');
+  }
+
+  async function handlePublishTimetable() {
+    setSavingTt(true);
+    try {
+      await saveTimetable(timetableList);
+      showToast(`Successfully published ${timetableList.length} timetable slot(s) to all student portals!`);
+    } catch (err) {
+      showToast('Failed to publish timetable: ' + err.message, 'error');
+    } finally {
+      setSavingTt(false);
     }
   }
 
@@ -376,6 +465,7 @@ export default function FacultyPage() {
         {[
           { key: 'attendance', label: 'Roll Call Attendance Marker', icon: <CheckCircle className="w-4 h-4" /> },
           { key: 'gradebook', label: 'Exam Marks & Gradebook', icon: <Award className="w-4 h-4" /> },
+          { key: 'timetable', label: 'Weekly Timetable Builder', icon: <CalendarDays className="w-4 h-4" /> },
           { key: 'roster', label: 'Department Faculty Roster', icon: <Users className="w-4 h-4" /> },
         ].map((tab) => (
           <button
@@ -672,6 +762,235 @@ export default function FacultyPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 4: WEEKLY TIMETABLE BUILDER */}
+      {activeTab === 'timetable' && (
+        <div className="space-y-6 animate-in fade-in">
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900">Weekly Class Timetable Builder</h2>
+                <p className="text-xs text-slate-500 mt-1">Design daily schedules, assign rooms, and publish live class routines to student portals.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePublishTimetable}
+                disabled={savingTt}
+                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                <Save className="w-4 h-4" />
+                <span>{savingTt ? 'Publishing...' : 'Publish Timetable to Student Portals'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* LEFT COLUMN: Add / Edit Slot Form */}
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                  <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-indigo-600" />
+                    <span>{editingSlotIdx !== null ? 'Edit Schedule Slot' : 'Add Class Schedule Slot'}</span>
+                  </h3>
+                  {editingSlotIdx !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSlotIdx(null);
+                        setSlotRoom('Lab 101');
+                      }}
+                      className="text-xs text-rose-600 font-bold hover:underline"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleAddOrUpdateSlot} className="space-y-3.5 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Day of Week *</label>
+                    <select
+                      value={slotDay}
+                      onChange={(e) => setSlotDay(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Lecture Time Slot *</label>
+                    <input
+                      type="text"
+                      required
+                      value={slotTime}
+                      onChange={(e) => setSlotTime(e.target.value)}
+                      placeholder="e.g. 09:00 AM - 10:30 AM"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Course Subject *</label>
+                    {facultySubjects.length > 0 ? (
+                      <select
+                        value={slotSubject}
+                        onChange={(e) => setSlotSubject(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="">-- Select Assigned Subject --</option>
+                        {facultySubjects.map((sub, i) => (
+                          <option key={i} value={sub}>{sub}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        required
+                        value={slotSubject}
+                        onChange={(e) => setSlotSubject(e.target.value)}
+                        placeholder="e.g. CS101 - Data Structures"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Classroom / Lab Location *</label>
+                    <input
+                      type="text"
+                      required
+                      value={slotRoom}
+                      onChange={(e) => setSlotRoom(e.target.value)}
+                      placeholder="e.g. Room 302 / Lab A"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Session Type *</label>
+                    <select
+                      value={slotType}
+                      onChange={(e) => setSlotType(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="Lecture">Lecture</option>
+                      <option value="Lab Practical">Lab Practical</option>
+                      <option value="Tutorial">Tutorial</option>
+                      <option value="Seminar">Seminar</option>
+                      <option value="Workshop">Workshop</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Instructor / Professor *</label>
+                    <input
+                      type="text"
+                      required
+                      value={slotFaculty}
+                      onChange={(e) => setSlotFaculty(e.target.value)}
+                      placeholder="e.g. Prof. Alan Turing"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95 mt-2"
+                  >
+                    <PlusCircle className="w-4 h-4 text-indigo-400" />
+                    <span>{editingSlotIdx !== null ? 'Update Slot in Timetable' : 'Add Slot to Timetable'}</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* RIGHT COLUMN: Weekly Schedule Cards by Day */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-100 pb-3">
+                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setSelectedTtDay(day)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                        selectedTtDay === day
+                          ? 'bg-indigo-600 text-white shadow-sm font-black'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+
+                {ttLoading ? (
+                  <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
+                    <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
+                    <span>Fetching active timetable from Firestore...</span>
+                  </div>
+                ) : timetableList.filter((t) => (t.day || '').toLowerCase() === selectedTtDay.toLowerCase()).length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                    <CalendarDays className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="font-bold text-slate-700 text-sm">No Class Slots Scheduled for {selectedTtDay}</p>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      Use the schedule slot form on the left to add lectures, lab sessions, and tutorials for {selectedTtDay}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {timetableList.map((item, idx) => {
+                      if ((item.day || '').toLowerCase() !== selectedTtDay.toLowerCase()) return null;
+                      return (
+                        <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 hover:shadow-md transition relative group">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                              {item.type || 'Lecture'}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSlot(idx)}
+                                className="p-1 text-slate-400 hover:text-indigo-600 rounded transition"
+                                title="Edit Slot"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSlot(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                                title="Delete Slot"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-black text-slate-900 text-sm">{item.subject}</h4>
+                            <p className="text-xs font-mono font-bold text-indigo-600 mt-1 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                              <span>{item.time}</span>
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Room: <strong>{item.room}</strong></span>
+                            </p>
+                          </div>
+                          <div className="pt-2 border-t border-slate-100 text-xs text-slate-600 flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>{item.faculty}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </main>
