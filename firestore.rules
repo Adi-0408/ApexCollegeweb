@@ -7,67 +7,37 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper: Safely retrieve lowercase email from auth token
-    function getUserEmail() {
-      return (isSignedIn() && 'token' in request.auth && 'email' in request.auth.token && request.auth.token.email != null) 
-        ? request.auth.token.email.toLowerCase() 
-        : '';
-    }
-
-    // Helper: Check if request email matches the document owner
-    function isOwner(email) {
-      return isSignedIn() && (getUserEmail() == '' || getUserEmail() == email.toLowerCase());
-    }
-
-    // Helper: Check if user is a Master Admin or authorized Assistant listed in admin_users
-    function isAdmin() {
-      return isSignedIn() && (
-        getUserEmail() == 'adityapatil.4132@gmail.com' ||
-        getUserEmail() == 'admin@apex.edu' ||
-        (getUserEmail() != '' && exists(/databases/$(database)/documents/admin_users/$(getUserEmail())))
-      );
-    }
-
     // -------------------------------------------------------------
-    // 1. APPLICATIONS COLLECTION
+    // 1. APPLICATIONS COLLECTION (Admissions)
     // -------------------------------------------------------------
     match /applications/{appId} {
-      // Students can create an application for themselves
-      allow create: if isSignedIn();
-      // Students can view/update only their own application; Admins can view/update all
-      allow read, update: if isAdmin() || (isSignedIn() && (getUserEmail() == '' || resource.data.email.toLowerCase() == getUserEmail()));
-      // Only admins can delete applications
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if isSignedIn();
     }
 
     // -------------------------------------------------------------
-    // 2. STUDENT PROFILES COLLECTION (Keyed by student email)
+    // 2. STUDENT PROFILES COLLECTION
     // -------------------------------------------------------------
     match /profiles/{email} {
-      // Students can manage their own profile; Admins can inspect/manage all
-      allow read, write: if isAdmin() || isOwner(email);
+      allow read, write: if isSignedIn();
     }
 
     // -------------------------------------------------------------
     // 3. ADMIN USERS & ASSISTANTS COLLECTION
     // -------------------------------------------------------------
     match /admin_users/{email} {
-      // Authenticated users can read admin user list to verify authority
-      allow read: if isSignedIn();
-      // Only authorized admins can create, update, or revoke staff/assistant accounts
-      allow write: if isAdmin();
+      allow read, write: if isSignedIn();
     }
 
     // -------------------------------------------------------------
-    // 4. SITE CONTENT & SETTINGS (CMS)
+    // 4. SITE SETTINGS & CONTENT (CMS)
     // -------------------------------------------------------------
     match /site_settings/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
     match /site_content/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // -------------------------------------------------------------
@@ -75,14 +45,14 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /programs/{progId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // -------------------------------------------------------------
-    // DEFAULT DENY ALL OTHER COLLECTIONS & DOCUMENTS
+    // DEFAULT DENY FOR UNAUTHENTICATED VISITORS ON PRIVATE PATHS
     // -------------------------------------------------------------
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isSignedIn();
     }
   }
 }
