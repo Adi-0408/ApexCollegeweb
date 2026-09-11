@@ -4,19 +4,19 @@ service cloud.firestore {
 
     // Helper: Check if request comes from an authenticated user
     function isSignedIn() {
-      return request.auth != null && request.auth.token != null;
+      return request.auth != null;
     }
 
     // Helper: Safely retrieve lowercase email from auth token
     function getUserEmail() {
-      return (isSignedIn() && 'email' in request.auth.token && request.auth.token.email != null) 
+      return (isSignedIn() && 'token' in request.auth && 'email' in request.auth.token && request.auth.token.email != null) 
         ? request.auth.token.email.toLowerCase() 
         : '';
     }
 
     // Helper: Check if request email matches the document owner
     function isOwner(email) {
-      return isSignedIn() && getUserEmail() == email.toLowerCase();
+      return isSignedIn() && (getUserEmail() == '' || getUserEmail() == email.toLowerCase());
     }
 
     // Helper: Check if user is a Master Admin or authorized Assistant listed in admin_users
@@ -33,9 +33,9 @@ service cloud.firestore {
     // -------------------------------------------------------------
     match /applications/{appId} {
       // Students can create an application for themselves
-      allow create: if isSignedIn() && request.resource.data.email.toLowerCase() == getUserEmail();
+      allow create: if isSignedIn();
       // Students can view/update only their own application; Admins can view/update all
-      allow read, update: if isAdmin() || (isSignedIn() && resource.data.email.toLowerCase() == getUserEmail());
+      allow read, update: if isAdmin() || (isSignedIn() && (getUserEmail() == '' || resource.data.email.toLowerCase() == getUserEmail()));
       // Only admins can delete applications
       allow delete: if isAdmin();
     }

@@ -400,11 +400,18 @@ export default function PortalPage() {
 
   async function handleAdmissionSubmit(e) {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.email) {
+      showToast('You must be signed in to submit an application.', 'error');
+      return;
+    }
+    if (!program) {
+      showToast('Please select a degree program.', 'error');
+      return;
+    }
     setAppLoading(true);
     const applicantName = `${firstName.trim()} ${lastName.trim()}`;
     const selectedProgram = program.trim();
-    const applicantEmail = currentUser.email;
+    const applicantEmail = currentUser.email.trim().toLowerCase();
 
     try {
       await addDoc(collection(db, 'applications'), {
@@ -428,7 +435,8 @@ export default function PortalPage() {
       setPhone('');
       setGpa('');
     } catch (err) {
-      showToast('Submission failed: ' + err.message, 'error');
+      console.error('Admission submit error:', err);
+      showToast('Submission failed: ' + err.message.replace('Firebase: ', ''), 'error');
     } finally {
       setAppLoading(false);
     }
