@@ -71,7 +71,7 @@ import {
 import { sendApplicationStatusEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useAuth, DEFAULT_ADMIN_EMAILS } from '../context/AuthContext.jsx';
-import { getFacultyList, saveFacultyMember, deleteFacultyMember, DEFAULT_FACULTY } from '../lib/academicData.js';
+import { getFacultyList, saveFacultyMember, deleteFacultyMember } from '../lib/academicData.js';
 import emailjs from '@emailjs/browser';
 
 export default function AdminPage() {
@@ -120,7 +120,7 @@ export default function AdminPage() {
   const [showPassMap, setShowPassMap] = useState({});
 
   // Faculty Management State
-  const [facultyList, setFacultyList] = useState(DEFAULT_FACULTY);
+  const [facultyList, setFacultyList] = useState([]);
   const [facName, setFacName] = useState('');
   const [facEmail, setFacEmail] = useState('');
   const [facDept, setFacDept] = useState('Computer Science & AI');

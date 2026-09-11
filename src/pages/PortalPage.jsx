@@ -42,7 +42,8 @@ import {
   Search,
   BookOpen,
   ShieldCheck,
-  Layers
+  Layers,
+  Inbox
 } from 'lucide-react';
 import {
   auth,
@@ -94,7 +95,7 @@ export default function PortalPage() {
   // ERP Student Tabs: 'overview' | 'attendance' | 'results' | 'schedule' | 'fees'
   const [erpTab, setErpTab] = useState('overview');
 
-  // Academic ERP Data
+  // Academic ERP Data (100% Real Firestore State)
   const [attendanceData, setAttendanceData] = useState([]);
   const [examResults, setExamResults] = useState([]);
   const [timetable, setTimetable] = useState([]);
@@ -556,19 +557,19 @@ export default function PortalPage() {
   // Overall Attendance calculation
   const totalClassesSum = attendanceData.reduce((acc, curr) => acc + curr.totalClasses, 0);
   const attendedClassesSum = attendanceData.reduce((acc, curr) => acc + curr.attendedClasses, 0);
-  const overallAttendancePct = totalClassesSum > 0 ? ((attendedClassesSum / totalClassesSum) * 100).toFixed(1) : '91.4';
+  const overallAttendancePct = totalClassesSum > 0 ? ((attendedClassesSum / totalClassesSum) * 100).toFixed(1) : '0.0';
   const lowAttendanceSubjects = attendanceData.filter((s) => s.percentage < 75);
 
-  return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 w-full flex-grow space-y-8">
-      {/* AUTH SCREEN FOR GUESTS */}
-      {!currentUser && (
-        <div className="max-w-md mx-auto bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-2xl space-y-6 relative overflow-hidden my-6">
+  // STRICT AUTH GUARD: NO PORTAL ACCESS WITHOUT LOGIN
+  if (!currentUser) {
+    return (
+      <main className="max-w-md mx-auto px-4 py-16 w-full flex-grow">
+        <div className="bg-white p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-2xl space-y-6 relative overflow-hidden text-center">
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-200">
             <UserCheck className="w-8 h-8" />
           </div>
-          <div className="text-center space-y-1">
+          <div className="space-y-1">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
               Student Academic ERP
             </span>
@@ -579,7 +580,7 @@ export default function PortalPage() {
               {isLogin ? 'Access your application status, attendance, and exam results' : 'Register to submit your admission application'}
             </p>
           </div>
-          <form onSubmit={handleAuth} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4 text-left">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Email Address</label>
               <input
@@ -621,8 +622,12 @@ export default function PortalPage() {
             </button>
           </div>
         </div>
-      )}
+      </main>
+    );
+  }
 
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 w-full flex-grow space-y-8">
       {/* ADMIN LOGGED IN NOTICE CARD */}
       {currentUser && currentUser.email && (ADMIN_EMAILS.includes(currentUser.email.toLowerCase()) || DEFAULT_ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) ? (
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl flex flex-col md:flex-row justify-between items-center gap-6 animate-in fade-in">
@@ -651,7 +656,7 @@ export default function PortalPage() {
             </button>
           </div>
         </div>
-      ) : currentUser ? (
+      ) : (
         /* LOGGED IN STUDENT ERP PORTAL */
         <div className="space-y-8 sm:space-y-10 animate-in fade-in">
           {/* Executive Student Header Banner */}
@@ -804,210 +809,103 @@ export default function PortalPage() {
                 )}
               </div>
 
-              {/* ACCEPTED STUDENT ENROLLMENT ROADMAP */}
-              {appStatus === 'accepted' && (
-                <div className="space-y-8 sm:space-y-10">
-                  <div className="bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden border border-indigo-500/20">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <span className="bg-emerald-400/20 text-emerald-300 text-[11px] font-extrabold uppercase tracking-widest px-3.5 py-1 rounded-full border border-emerald-400/30 inline-block">
-                          Official Offer Extended
-                        </span>
-                        <h2 className="text-xl sm:text-2xl font-black text-white mt-1">Accepted Student Enrollment Roadmap</h2>
-                        <p className="text-xs sm:text-sm text-indigo-200/90">
-                          Complete your verification interview and personal profile to finalize matriculation.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={printAcceptanceLetter}
-                        className="w-full sm:w-auto bg-white hover:bg-slate-100 active:scale-95 text-indigo-950 font-extrabold px-5 py-3 rounded-2xl text-xs sm:text-sm shadow-xl transition flex items-center justify-center gap-2 shrink-0"
-                      >
-                        <Printer className="w-4 h-4 text-indigo-600" />
-                        <span>Download Offer Letter</span>
-                      </button>
+              {/* ONLINE ADMISSION APPLICATION FORM */}
+              {showApplyForm && (
+                <section id="apply" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-10 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0">
+                      <FileCheck className="w-6 h-6" />
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-                      {[
-                        { label: 'Application Submitted', done: true, num: '1', note: 'Completed' },
-                        { label: 'Verification Slot', done: step2Done, num: '2', note: isVisitCompleted ? 'Verified ✓' : 'Required' },
-                        { label: 'Personal Profile', done: profileDone, num: '3', note: 'Required' },
-                        { label: 'Housing & Dining', done: step4Done, num: '4', note: 'Optional' },
-                      ].map((step, i) => (
-                        <div
-                          key={i}
-                          className={`backdrop-blur-md rounded-2xl p-3.5 border transition-all ${
-                            step.done
-                              ? 'bg-white/15 border-emerald-400/40 shadow-inner'
-                              : 'bg-white/5 border-white/10 opacity-80'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-8 h-8 rounded-xl font-black flex items-center justify-center text-xs shrink-0 shadow-md ${
-                                step.done ? 'bg-emerald-400 text-indigo-950 font-black' : 'bg-indigo-600 text-white'
-                              }`}
-                            >
-                              {step.done ? '✓' : step.num}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] uppercase font-extrabold text-indigo-200/90 truncate">
-                                Step {i + 1} • <span className={step.note === 'Optional' ? 'text-amber-300 font-bold' : ''}>{step.note}</span>
-                              </p>
-                              <p className="text-xs font-black text-white truncate">{step.label}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div>
+                      <h2 className="text-xl sm:text-3xl font-black text-slate-900">Online Admission Application</h2>
+                      <p className="text-xs sm:text-sm text-slate-500">Please fill out all mandatory fields below</p>
                     </div>
                   </div>
-
-                  {/* STEP 2: VERIFICATION APPOINTMENT SCHEDULE */}
-                  <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner shrink-0">
-                          <Calendar className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="text-base sm:text-lg font-black text-slate-900">Step 2: Document Verification &amp; Campus Welcome</h4>
-                          <p className="text-xs sm:text-sm text-slate-500">Book your in-person or virtual verification session with our admissions team.</p>
-                        </div>
+                  <form onSubmit={handleAdmissionSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-2">First Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
                       </div>
-                      <span
-                        className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                          isVisitCompleted
-                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                            : step2Done
-                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        {isVisitCompleted ? 'Verified ✓' : step2Done ? 'Scheduled' : 'Action Required'}
-                      </span>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Last Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
                     </div>
-
-                    {step2Done && !isEditingAppt ? (
-                      <div className="bg-gradient-to-br from-slate-50 to-indigo-50/30 p-6 rounded-2xl border border-slate-200 space-y-4 animate-in fade-in">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Interview Mode</span>
-                            <strong className="text-slate-900 text-sm flex items-center gap-1.5 mt-1">
-                              {apptMode.includes('Virtual') ? <Video className="w-4 h-4 text-indigo-600" /> : <Building2 className="w-4 h-4 text-indigo-600" />}
-                              <span>{apptMode}</span>
-                            </strong>
-                          </div>
-                          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Scheduled Date</span>
-                            <strong className="text-slate-900 text-sm flex items-center gap-1.5 mt-1">
-                              <Calendar className="w-4 h-4 text-indigo-600" />
-                              <span>{apptDate}</span>
-                            </strong>
-                          </div>
-                          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Time Slot</span>
-                            <strong className="text-slate-900 text-sm flex items-center gap-1.5 mt-1">
-                              <Clock className="w-4 h-4 text-indigo-600" />
-                              <span>{apptTime || '10:00 AM - 11:30 AM'}</span>
-                            </strong>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 text-xs">
-                          <span className="text-slate-500">
-                            {isVisitCompleted ? (
-                              <strong className="text-emerald-700 font-bold">✓ Official document review has been completed and verified.</strong>
-                            ) : (
-                              'Bring your official transcripts, government photo ID, and recommendation letters.'
-                            )}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {!isVisitCompleted && (
-                              <button
-                                type="button"
-                                onClick={handleMarkVisitComplete}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Mark Visit Complete</span>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingAppt(true)}
-                              className="bg-white hover:bg-slate-100 text-slate-700 font-bold px-4 py-2 rounded-xl border border-slate-300 transition flex items-center gap-1.5 shadow-sm"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Reschedule Slot</span>
-                            </button>
-                          </div>
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Email Address *</label>
+                        <input
+                          type="email"
+                          value={currentUser.email}
+                          readOnly
+                          className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-600 font-bold text-sm cursor-not-allowed"
+                        />
                       </div>
-                    ) : (
-                      <form onSubmit={handleAppointmentSubmit} className="space-y-6 animate-in fade-in">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Interview Mode *</label>
-                            <select
-                              value={apptMode}
-                              onChange={(e) => setApptMode(e.target.value)}
-                              required
-                              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            >
-                              <option value="In-Person (Campus Welcome Center)">In-Person (Campus Welcome Center)</option>
-                              <option value="Virtual (Zoom / Google Meet)">Virtual (Zoom / Google Meet)</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Select Date *</label>
-                            <input
-                              type="date"
-                              required
-                              value={apptDate}
-                              onChange={(e) => setApptDate(e.target.value)}
-                              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Select Time Slot *</label>
-                            <select
-                              value={apptTime}
-                              onChange={(e) => setApptTime(e.target.value)}
-                              required
-                              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            >
-                              <option value="">-- Choose Slot --</option>
-                              <option value="09:00 AM - 10:30 AM">09:00 AM - 10:30 AM</option>
-                              <option value="11:00 AM - 12:30 PM">11:00 AM - 12:30 PM</option>
-                              <option value="02:00 PM - 03:30 PM">02:00 PM - 03:30 PM</option>
-                              <option value="04:00 PM - 05:30 PM">04:00 PM - 05:30 PM</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            type="submit"
-                            disabled={apptLoading}
-                            className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-4 rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-60"
-                          >
-                            <Calendar className="w-4 h-4" />
-                            <span>{apptLoading ? 'Saving in Database...' : step2Done ? 'Update Appointment Schedule' : 'Confirm & Save Appointment Schedule'}</span>
-                          </button>
-                          {step2Done && (
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingAppt(false)}
-                              className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs sm:text-sm px-6 py-4 rounded-xl transition"
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                    )}
-                  </div>
-                </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Phone Number *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+1 (555) 000-0000"
+                          className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Select Degree Program *</label>
+                      <select
+                        required
+                        value={program}
+                        onChange={(e) => setProgram(e.target.value)}
+                        className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="">-- Choose Degree Program --</option>
+                        {availablePrograms.map((p) => {
+                          const fullTitle = p.fullTitle || `${p.degree ? p.degree + ' ' : ''}${p.title}`;
+                          return (
+                            <option key={p.id} value={fullTitle}>
+                              {fullTitle}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Previous GPA / Score (%) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={gpa}
+                        onChange={(e) => setGpa(e.target.value)}
+                        placeholder="e.g. 3.8 GPA or 88%"
+                        className="w-full px-4 py-3.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={appLoading}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold py-4 rounded-xl shadow-lg shadow-indigo-200 transition text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>{appLoading ? 'Submitting...' : 'Submit Admission Application'}</span>
+                    </button>
+                  </form>
+                </section>
               )}
             </div>
           )}
@@ -1032,82 +930,52 @@ export default function PortalPage() {
                 </div>
               </div>
 
-              {lowAttendanceSubjects.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl p-4 sm:p-5 flex items-start gap-3 shadow-2xs">
-                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1 text-xs">
-                    <strong className="font-extrabold text-sm text-rose-950">Attendance Warning Alert!</strong>
-                    <p>
-                      You have <strong>{lowAttendanceSubjects.length} subject(s)</strong> below the mandatory 75% attendance threshold. Please attend upcoming lectures regularly or consult your faculty professor.
-                    </p>
+              {attendanceData.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200 p-8 space-y-3 shadow-sm">
+                  <Inbox className="w-10 h-10 text-indigo-300 mx-auto" />
+                  <p className="font-black text-slate-800 text-base">No Class Attendance Records Yet</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Once your course professors record daily lecture roll call in the Faculty Console, your live attendance percentages will update here automatically.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-5 sm:p-6 border-b border-slate-200 flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 text-base">Subject-wise Class Breakdown</h3>
+                    <span className="text-xs text-slate-400 font-medium">Academic Term Records</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                          <th className="py-4 px-5">Subject Code</th>
+                          <th className="py-4 px-5">Course Title</th>
+                          <th className="py-4 px-4 text-center">Classes Attended</th>
+                          <th className="py-4 px-4 text-center">Total Conducted</th>
+                          <th className="py-4 px-4 text-center">Attendance %</th>
+                          <th className="py-4 px-5 text-right">Academic Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {attendanceData.map((sub, i) => (
+                          <tr key={i} className="hover:bg-slate-50/70 transition">
+                            <td className="py-4 px-5 font-mono font-bold text-indigo-600">{sub.subjectCode}</td>
+                            <td className="py-4 px-5 font-black text-slate-900">{sub.subjectName}</td>
+                            <td className="py-4 px-4 text-center font-bold text-slate-900">{sub.attendedClasses}</td>
+                            <td className="py-4 px-4 text-center text-slate-500 font-medium">{sub.totalClasses}</td>
+                            <td className="py-4 px-4 text-center">
+                              <span className={`font-black text-xs ${sub.percentage >= 75 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {sub.percentage}%
+                              </span>
+                            </td>
+                            <td className="py-4 px-5 text-right font-bold">{sub.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
-
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-5 sm:p-6 border-b border-slate-200 flex items-center justify-between">
-                  <h3 className="font-black text-slate-900 text-base">Subject-wise Class Breakdown</h3>
-                  <span className="text-xs text-slate-400 font-medium">Fall 2026 Academic Term</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
-                        <th className="py-4 px-5">Subject Code</th>
-                        <th className="py-4 px-5">Course Title</th>
-                        <th className="py-4 px-4 text-center">Classes Attended</th>
-                        <th className="py-4 px-4 text-center">Total Conducted</th>
-                        <th className="py-4 px-4 text-center">Attendance %</th>
-                        <th className="py-4 px-5 text-right">Academic Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {attendanceData.map((sub, i) => (
-                        <tr key={i} className="hover:bg-slate-50/70 transition">
-                          <td className="py-4 px-5 font-mono font-bold text-indigo-600">{sub.subjectCode}</td>
-                          <td className="py-4 px-5 font-black text-slate-900">{sub.subjectName}</td>
-                          <td className="py-4 px-4 text-center font-bold text-slate-900">{sub.attendedClasses}</td>
-                          <td className="py-4 px-4 text-center text-slate-500 font-medium">{sub.totalClasses}</td>
-                          <td className="py-4 px-4 text-center">
-                            <div className="inline-flex items-center gap-2">
-                              <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200 hidden sm:block">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    sub.percentage >= 90 ? 'bg-emerald-500' : sub.percentage >= 75 ? 'bg-indigo-600' : 'bg-rose-500'
-                                  }`}
-                                  style={{ width: `${Math.min(sub.percentage, 100)}%` }}
-                                />
-                              </div>
-                              <span className={`font-black text-xs ${
-                                sub.percentage >= 90 ? 'text-emerald-600' : sub.percentage >= 75 ? 'text-indigo-600' : 'text-rose-600'
-                              }`}>
-                                {sub.percentage}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-5 text-right">
-                            {sub.percentage >= 90 && (
-                              <span className="inline-block bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-emerald-200">
-                                Excellent ✓
-                              </span>
-                            )}
-                            {sub.percentage >= 75 && sub.percentage < 90 && (
-                              <span className="inline-block bg-indigo-50 text-indigo-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-indigo-200">
-                                Good ✓
-                              </span>
-                            )}
-                            {sub.percentage < 75 && (
-                              <span className="inline-block bg-rose-50 text-rose-700 text-[10px] font-black px-2.5 py-1 rounded-full border border-rose-200 animate-pulse">
-                                Warning (&lt;75%) ⚠️
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1119,80 +987,93 @@ export default function PortalPage() {
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900">Academic Examination Marksheet</h2>
                   <p className="text-xs text-slate-500 mt-1">Official semester grade records and Cumulative Grade Point Average (CGPA).</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={printAcceptanceLetter}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Grade Card</span>
-                </button>
-              </div>
-
-              {/* Semester Switcher */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {examResults.map((sem, idx) => (
+                {examResults.length > 0 && (
                   <button
-                    key={idx}
                     type="button"
-                    onClick={() => setSelectedSemIdx(idx)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-                      selectedSemIdx === idx
-                        ? 'bg-indigo-600 text-white shadow-md'
-                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                    }`}
+                    onClick={printAcceptanceLetter}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2"
                   >
-                    {sem.semester}
+                    <Printer className="w-4 h-4" />
+                    <span>Print Grade Card</span>
                   </button>
-                ))}
+                )}
               </div>
 
-              {examResults[selectedSemIdx] && (
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                    <div>
-                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Semester Performance</span>
-                      <h3 className="text-xl font-black text-slate-900 mt-0.5">{examResults[selectedSemIdx].semester}</h3>
-                      <p className="text-xs text-emerald-700 font-bold mt-1">Status: {examResults[selectedSemIdx].status}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs text-center">
-                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">SGPA Score</span>
-                      <strong className="text-2xl font-black text-indigo-600 block mt-0.5">{examResults[selectedSemIdx].sgpa}</strong>
-                    </div>
+              {examResults.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200 p-8 space-y-3 shadow-sm">
+                  <Award className="w-10 h-10 text-indigo-300 mx-auto" />
+                  <p className="font-black text-slate-800 text-base">No Examination Results Published Yet</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Official semester marksheets, SGPA/CGPA scores, and grade breakdown will be published here by the examination controller.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {examResults.map((sem, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSelectedSemIdx(idx)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                          selectedSemIdx === idx
+                            ? 'bg-indigo-600 text-white shadow-md'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        {sem.semester}
+                      </button>
+                    ))}
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
-                          <th className="py-4 px-5">Code</th>
-                          <th className="py-4 px-5">Subject Name</th>
-                          <th className="py-4 px-4 text-center">Credits</th>
-                          <th className="py-4 px-4 text-center">Internal (/30)</th>
-                          <th className="py-4 px-4 text-center">Endterm (/70)</th>
-                          <th className="py-4 px-4 text-center">Total (/100)</th>
-                          <th className="py-4 px-5 text-right">Letter Grade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {examResults[selectedSemIdx].subjects.map((sub, i) => (
-                          <tr key={i} className="hover:bg-slate-50/70 transition">
-                            <td className="py-4 px-5 font-mono font-bold text-indigo-600">{sub.code}</td>
-                            <td className="py-4 px-5 font-black text-slate-900">{sub.name}</td>
-                            <td className="py-4 px-4 text-center font-bold text-slate-700">{sub.credits}</td>
-                            <td className="py-4 px-4 text-center text-slate-600">{sub.internalMarks}</td>
-                            <td className="py-4 px-4 text-center text-slate-600">{sub.endtermMarks}</td>
-                            <td className="py-4 px-4 text-center font-black text-slate-900">{sub.totalMarks}</td>
-                            <td className="py-4 px-5 text-right">
-                              <span className="inline-block bg-indigo-50 text-indigo-700 font-black text-xs px-3 py-1 rounded-lg border border-indigo-200">
-                                {sub.grade}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {examResults[selectedSemIdx] && (
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Semester Performance</span>
+                          <h3 className="text-xl font-black text-slate-900 mt-0.5">{examResults[selectedSemIdx].semester}</h3>
+                          <p className="text-xs text-emerald-700 font-bold mt-1">Status: {examResults[selectedSemIdx].status}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs text-center">
+                          <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">SGPA Score</span>
+                          <strong className="text-2xl font-black text-indigo-600 block mt-0.5">{examResults[selectedSemIdx].sgpa}</strong>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                              <th className="py-4 px-5">Code</th>
+                              <th className="py-4 px-5">Subject Name</th>
+                              <th className="py-4 px-4 text-center">Credits</th>
+                              <th className="py-4 px-4 text-center">Internal (/30)</th>
+                              <th className="py-4 px-4 text-center">Endterm (/70)</th>
+                              <th className="py-4 px-4 text-center">Total (/100)</th>
+                              <th className="py-4 px-5 text-right">Letter Grade</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {examResults[selectedSemIdx].subjects.map((sub, i) => (
+                              <tr key={i} className="hover:bg-slate-50/70 transition">
+                                <td className="py-4 px-5 font-mono font-bold text-indigo-600">{sub.code}</td>
+                                <td className="py-4 px-5 font-black text-slate-900">{sub.name}</td>
+                                <td className="py-4 px-4 text-center font-bold text-slate-700">{sub.credits}</td>
+                                <td className="py-4 px-4 text-center text-slate-600">{sub.internalMarks}</td>
+                                <td className="py-4 px-4 text-center text-slate-600">{sub.endtermMarks}</td>
+                                <td className="py-4 px-4 text-center font-black text-slate-900">{sub.totalMarks}</td>
+                                <td className="py-4 px-5 text-right">
+                                  <span className="inline-block bg-indigo-50 text-indigo-700 font-black text-xs px-3 py-1 rounded-lg border border-indigo-200">
+                                    {sub.grade}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1226,13 +1107,17 @@ export default function PortalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {timetable.filter((t) => t.day.toLowerCase() === selectedDay.toLowerCase()).length === 0 ? (
-                  <div className="col-span-3 text-center py-12 text-slate-400 bg-white rounded-3xl border border-slate-200 p-6">
-                    No lectures scheduled for {selectedDay}.
-                  </div>
-                ) : (
-                  timetable
+              {timetable.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200 p-8 space-y-3 shadow-sm">
+                  <CalendarDays className="w-10 h-10 text-indigo-300 mx-auto" />
+                  <p className="font-black text-slate-800 text-base">No Timetable Uploaded Yet</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Class timetables and daily room allocations will be published here by the academic department.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {timetable
                     .filter((t) => t.day.toLowerCase() === selectedDay.toLowerCase())
                     .map((item, idx) => (
                       <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 hover:shadow-lg transition">
@@ -1257,67 +1142,79 @@ export default function PortalPage() {
                           <span>{item.faculty}</span>
                         </div>
                       </div>
-                    ))
-                )}
-              </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* TAB 5: TUITION FEES & RECEIPTS */}
-          {erpTab === 'fees' && feeRecord && (
+          {erpTab === 'fees' && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-slate-400">Net Academic Tuition Fee</span>
-                  <h3 className="text-3xl font-black text-slate-900">${feeRecord.netTuition}</h3>
-                  <p className="text-xs text-slate-500 font-medium">Academic Year {feeRecord.academicYear}</p>
+              {!feeRecord ? (
+                <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200 p-8 space-y-3 shadow-sm">
+                  <Receipt className="w-10 h-10 text-indigo-300 mx-auto" />
+                  <p className="font-black text-slate-800 text-base">No Fee Records Found</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Tuition fee clearances and verified payment receipts will appear here automatically upon enrollment verification.
+                  </p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-emerald-600">Total Paid Amount</span>
-                  <h3 className="text-3xl font-black text-emerald-600">${feeRecord.paidAmount}</h3>
-                  <p className="text-xs text-emerald-600/80 font-bold">Status: {feeRecord.status}</p>
-                </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-indigo-600">Pending Dues</span>
-                  <h3 className="text-3xl font-black text-indigo-600">${feeRecord.pendingDues}</h3>
-                  <p className="text-xs text-slate-500 font-medium">No Outstanding Clearance Required</p>
-                </div>
-              </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400">Net Academic Tuition Fee</span>
+                      <h3 className="text-3xl font-black text-slate-900">${feeRecord.netTuition}</h3>
+                      <p className="text-xs text-slate-500 font-medium">Academic Year {feeRecord.academicYear}</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase text-emerald-600">Total Paid Amount</span>
+                      <h3 className="text-3xl font-black text-emerald-600">${feeRecord.paidAmount}</h3>
+                      <p className="text-xs text-emerald-600/80 font-bold">Status: {feeRecord.status}</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase text-indigo-600">Pending Dues</span>
+                      <h3 className="text-3xl font-black text-indigo-600">${feeRecord.pendingDues}</h3>
+                      <p className="text-xs text-slate-500 font-medium">No Outstanding Clearance Required</p>
+                    </div>
+                  </div>
 
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-                  <h3 className="font-black text-slate-900 text-base">Payment Receipt History</h3>
-                  <span className="text-xs text-slate-400">Verified Financial Transactions</span>
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+                      <h3 className="font-black text-slate-900 text-base">Payment Receipt History</h3>
+                      <span className="text-xs text-slate-400">Verified Financial Transactions</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                            <th className="py-4 px-5">Receipt Ref ID</th>
+                            <th className="py-4 px-5">Date</th>
+                            <th className="py-4 px-5">Payment Description</th>
+                            <th className="py-4 px-4 text-center">Amount Paid</th>
+                            <th className="py-4 px-5 text-right">Payment Method</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {feeRecord.transactions.map((txn, i) => (
+                            <tr key={i} className="hover:bg-slate-50/70 transition">
+                              <td className="py-4 px-5 font-mono font-bold text-indigo-600">{txn.id}</td>
+                              <td className="py-4 px-5 font-medium text-slate-600">{txn.date}</td>
+                              <td className="py-4 px-5 font-black text-slate-900">{txn.description}</td>
+                              <td className="py-4 px-4 text-center font-black text-emerald-600">${txn.amount}</td>
+                              <td className="py-4 px-5 text-right font-medium text-slate-600">{txn.method}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
-                        <th className="py-4 px-5">Receipt Ref ID</th>
-                        <th className="py-4 px-5">Date</th>
-                        <th className="py-4 px-5">Payment Description</th>
-                        <th className="py-4 px-4 text-center">Amount Paid</th>
-                        <th className="py-4 px-5 text-right">Payment Method</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {feeRecord.transactions.map((txn, i) => (
-                        <tr key={i} className="hover:bg-slate-50/70 transition">
-                          <td className="py-4 px-5 font-mono font-bold text-indigo-600">{txn.id}</td>
-                          <td className="py-4 px-5 font-medium text-slate-600">{txn.date}</td>
-                          <td className="py-4 px-5 font-black text-slate-900">{txn.description}</td>
-                          <td className="py-4 px-4 text-center font-black text-emerald-600">${txn.amount}</td>
-                          <td className="py-4 px-5 text-right font-medium text-slate-600">{txn.method}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           )}
         </div>
-      ) : null}
+      )}
     </main>
   );
 }
