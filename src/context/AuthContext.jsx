@@ -13,9 +13,11 @@ export function AuthProvider({ children }) {
   const [isAccepted, setIsAccepted] = useState(false);
   const [adminEmails, setAdminEmails] = useState(DEFAULT_ADMIN_EMAILS);
 
-  // Dynamic admin check against default admins + Firestore staff collection
+  // Dynamic admin check against default master admins + Firestore assistant collection
+  const userEmailLower = currentUser?.email ? currentUser.email.toLowerCase() : '';
   const isAdmin = !!(
-    currentUser?.email && adminEmails.includes(currentUser.email.toLowerCase())
+    userEmailLower &&
+    (DEFAULT_ADMIN_EMAILS.includes(userEmailLower) || adminEmails.includes(userEmailLower))
   );
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function AuthProvider({ children }) {
           (err) => console.warn('AuthContext apps listener:', err)
         );
 
-        // 2. Staff/Assistant Users Listener (Runs safely when user is signed in)
+        // 2. Staff/Assistant Users Listener
         asstUnsub = onSnapshot(
           collection(db, 'admin_users'),
           (snap) => {

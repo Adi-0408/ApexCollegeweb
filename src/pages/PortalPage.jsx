@@ -371,7 +371,8 @@ export default function PortalPage() {
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email.trim(), password);
-        if (email.trim().toLowerCase() === 'admin@apex.edu') {
+        const cleanEmail = email.trim().toLowerCase();
+        if (ADMIN_EMAILS.includes(cleanEmail) || DEFAULT_ADMIN_EMAILS.includes(cleanEmail)) {
           sessionStorage.setItem('adminUnlocked', 'true');
           showToast('Welcome Admin! Redirecting to admin console...');
           navigate('/admin');

@@ -59,12 +59,14 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------
-    // 4. SITE CONTENT (CMS)
+    // 4. SITE CONTENT & SETTINGS (CMS)
     // -------------------------------------------------------------
-    match /site_content/{docId} {
-      // Public site visitors can read CMS content
+    match /site_settings/{docId} {
       allow read: if true;
-      // Only admins can modify website hero, stats, and campus facility text
+      allow write: if isAdmin();
+    }
+    match /site_content/{docId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -72,9 +74,7 @@ service cloud.firestore {
     // 5. ACADEMIC PROGRAMS CATALOG
     // -------------------------------------------------------------
     match /programs/{progId} {
-      // Public site visitors can view degree catalog
       allow read: if true;
-      // Only admins can add, edit, or delete degree programs
       allow write: if isAdmin();
     }
 
