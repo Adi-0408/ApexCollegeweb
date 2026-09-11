@@ -50,7 +50,6 @@ export default function Navbar() {
     { to: '/programs', label: 'Programs', icon: <BookOpen className="w-4 h-4" /> },
     { to: '/campus', label: 'Campus Life', icon: <Building2 className="w-4 h-4" /> },
     { to: '/contact', label: 'Contact', icon: <Mail className="w-4 h-4" /> },
-    { to: '/faculty', label: 'Faculty Zone', icon: <GraduationCap className="w-4 h-4" /> },
   ];
 
   return (

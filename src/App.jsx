@@ -56,6 +56,34 @@ function ProtectedAdminRoute({ children }) {
   return children;
 }
 
+// Protected route guard for Faculty Console
+function ProtectedFacultyRoute({ children }) {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (currentUser !== undefined) {
+      if (!currentUser) {
+        navigate('/portal', { replace: true });
+      }
+    }
+  }, [currentUser, navigate]);
+
+  if (currentUser === undefined) {
+    return (
+      <div className="flex-grow flex items-center justify-center py-20 text-slate-400 font-bold text-sm">
+        Verifying faculty credentials...
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <div className="flex flex-col min-h-screen">
@@ -68,7 +96,14 @@ export default function App() {
           <Route path="/campus" element={<CampusPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/portal" element={<PortalPage />} />
-          <Route path="/faculty" element={<FacultyPage />} />
+          <Route
+            path="/faculty"
+            element={
+              <ProtectedFacultyRoute>
+                <FacultyPage />
+              </ProtectedFacultyRoute>
+            }
+          />
           <Route
             path="/admin"
             element={

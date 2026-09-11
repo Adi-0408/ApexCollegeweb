@@ -640,12 +640,18 @@ export default function PortalPage() {
               <p className="text-xs text-indigo-200/80 mt-0.5 font-mono">{currentUser.email}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
             <Link
               to="/admin"
               className="flex-1 md:flex-initial text-center bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-lg transition"
             >
               Open Admin Console
+            </Link>
+            <Link
+              to="/faculty"
+              className="flex-1 md:flex-initial text-center bg-white/10 hover:bg-white/20 border border-white/20 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-lg transition"
+            >
+              Open Faculty Console
             </Link>
             <button
               type="button"
