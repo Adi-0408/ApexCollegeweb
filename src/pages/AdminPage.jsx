@@ -71,6 +71,7 @@ import {
 import { sendApplicationStatusEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useAuth, DEFAULT_ADMIN_EMAILS } from '../context/AuthContext.jsx';
+import { getFacultyList, saveFacultyMember, deleteFacultyMember, DEFAULT_FACULTY } from '../lib/academicData.js';
 import emailjs from '@emailjs/browser';
 
 export default function AdminPage() {
@@ -117,6 +118,58 @@ export default function AdminPage() {
   const [asstRole, setAsstRole] = useState('Admissions Assistant');
   const [asstSaving, setAsstSaving] = useState(false);
   const [showPassMap, setShowPassMap] = useState({});
+
+  // Faculty Management State
+  const [facultyList, setFacultyList] = useState(DEFAULT_FACULTY);
+  const [facName, setFacName] = useState('');
+  const [facEmail, setFacEmail] = useState('');
+  const [facDept, setFacDept] = useState('Computer Science & AI');
+  const [facRole, setFacRole] = useState('Professor');
+  const [facSubject, setFacSubject] = useState('');
+  const [facSaving, setFacSaving] = useState(false);
+
+  async function loadFaculty() {
+    const list = await getFacultyList();
+    setFacultyList(list);
+  }
+
+  async function handleAddFaculty(e) {
+    e.preventDefault();
+    if (!facName || !facEmail) {
+      showToast('Please fill out Name and Email.', 'error');
+      return;
+    }
+    setFacSaving(true);
+    try {
+      await saveFacultyMember({
+        name: facName.trim(),
+        email: facEmail.trim().toLowerCase(),
+        department: facDept.trim(),
+        role: facRole.trim(),
+        assignedSubject: facSubject.trim() || 'General Course',
+      });
+      showToast(`Faculty member ${facName} registered successfully!`);
+      setFacName('');
+      setFacEmail('');
+      setFacSubject('');
+      loadFaculty();
+    } catch (err) {
+      showToast('Failed to add faculty: ' + err.message, 'error');
+    } finally {
+      setFacSaving(false);
+    }
+  }
+
+  async function handleDeleteFaculty(facId) {
+    if (!window.confirm('Are you sure you want to remove this faculty record?')) return;
+    try {
+      await deleteFacultyMember(facId);
+      showToast('Faculty member removed.');
+      loadFaculty();
+    } catch (err) {
+      showToast('Failed to remove faculty: ' + err.message, 'error');
+    }
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -170,6 +223,7 @@ export default function AdminPage() {
     loadPrograms();
     loadCms();
     loadAssistants();
+    loadFaculty();
   }
 
   async function loadApplications() {
@@ -461,6 +515,7 @@ export default function AdminPage() {
     { key: 'programs', label: 'Degree Majors', icon: <BookOpen className="w-4 h-4" />, count: programsCount },
     { key: 'cms', label: 'Website CMS', icon: <LayoutTemplate className="w-4 h-4" /> },
     { key: 'assistants', label: 'Staff & Assistants', icon: <UserPlus className="w-4 h-4" />, count: assistantsCount },
+    { key: 'faculty', label: 'Faculty Roster', icon: <Building2 className="w-4 h-4" /> },
   ];
 
   // Helper to split program string nicely
@@ -1770,6 +1825,122 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: FACULTY & PROFESSOR ROSTER */}
+      {activeTab === 'faculty' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 border-b pb-4">
+              <Building2 className="w-6 h-6 text-indigo-600" />
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Register New Faculty Member / Professor</h3>
+                <p className="text-xs text-slate-500">Assign course subjects and department affiliations to academic staff.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddFaculty} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={facName}
+                    onChange={(e) => setFacName(e.target.value)}
+                    placeholder="e.g. Dr. Robert Miller"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Staff Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={facEmail}
+                    onChange={(e) => setFacEmail(e.target.value)}
+                    placeholder="e.g. robert.miller@apex.edu"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Department *</label>
+                  <input
+                    type="text"
+                    required
+                    value={facDept}
+                    onChange={(e) => setFacDept(e.target.value)}
+                    placeholder="Computer Science & AI"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Academic Role / Designation</label>
+                  <input
+                    type="text"
+                    value={facRole}
+                    onChange={(e) => setFacRole(e.target.value)}
+                    placeholder="e.g. Professor & Lab Director"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assigned Subject / Course Code</label>
+                  <input
+                    type="text"
+                    value={facSubject}
+                    onChange={(e) => setFacSubject(e.target.value)}
+                    placeholder="e.g. CS101 - Data Structures"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={facSaving}
+                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>{facSaving ? 'Registering...' : 'Register Faculty Record'}</span>
+              </button>
+            </form>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {facultyList.map((fac) => (
+              <div key={fac.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between hover:shadow-lg transition">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+                      {fac.department}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">{fac.role}</span>
+                  </div>
+                  <h4 className="font-black text-slate-900 text-lg">{fac.name}</h4>
+                  <p className="text-xs text-slate-500 font-mono">{fac.email}</p>
+                  <p className="text-xs text-slate-700 font-semibold pt-1">
+                    Subject: <strong className="text-indigo-600">{fac.assignedSubject}</strong>
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteFaculty(fac.id)}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl border border-rose-200 transition flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove</span>
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

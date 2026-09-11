@@ -8,6 +8,7 @@ import CampusPage from './pages/CampusPage.jsx';
 import ContactPage from './pages/ContactPage.jsx';
 import PortalPage from './pages/PortalPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
+import FacultyPage from './pages/FacultyPage.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
 function ScrollToTop() {
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/campus" element={<CampusPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/portal" element={<PortalPage />} />
+          <Route path="/faculty" element={<FacultyPage />} />
           <Route
             path="/admin"
             element={
