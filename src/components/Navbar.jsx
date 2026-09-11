@@ -7,7 +7,7 @@ import LoginModal from './LoginModal.jsx';
 
 export default function Navbar() {
   const { siteContent } = useSiteData();
-  const { currentUser, isAccepted, isAdmin } = useAuth();
+  const { currentUser, isAccepted, isAdmin, isFaculty } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -36,6 +36,8 @@ export default function Navbar() {
       setShowLoginModal(true);
     } else if (isAdmin) {
       navigate('/admin');
+    } else if (isFaculty) {
+      navigate('/faculty');
     } else {
       if (progName) {
         navigate(`/portal?program=${encodeURIComponent(progName)}`);
@@ -94,7 +96,15 @@ export default function Navbar() {
 
             {/* Right Controls */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {isAdmin ? (
+              {isFaculty ? (
+                <Link
+                  to="/faculty"
+                  className="hidden sm:inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 sm:px-4 py-2.5 rounded-xl shadow-md transition"
+                >
+                  <ShieldCheck className="w-4 h-4 text-indigo-200" />
+                  <span>Faculty Console</span>
+                </Link>
+              ) : isAdmin ? (
                 <Link
                   to="/admin"
                   className="hidden sm:inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 px-3.5 sm:px-4 py-2.5 rounded-xl shadow-md transition"
@@ -112,8 +122,8 @@ export default function Navbar() {
                 </Link>
               )}
 
-              {/* Show Apply Now button ONLY if not accepted AND not admin */}
-              {!isAccepted && !isAdmin && (
+              {/* Show Apply Now button ONLY if not accepted AND not admin AND not faculty */}
+              {!isAccepted && !isAdmin && !isFaculty && (
                 <button
                   type="button"
                   onClick={(e) => handleApplyClick(e)}
@@ -155,7 +165,16 @@ export default function Navbar() {
                 </Link>
               ))}
               <div className="pt-2 border-t border-slate-100 space-y-2">
-                {isAdmin ? (
+                {isFaculty ? (
+                  <Link
+                    to="/faculty"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-extrabold text-sm transition"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-indigo-200" />
+                    <span>Faculty Staff Console</span>
+                  </Link>
+                ) : isAdmin ? (
                   <Link
                     to="/admin"
                     onClick={() => setMobileOpen(false)}
@@ -174,7 +193,7 @@ export default function Navbar() {
                     <span>Student Portal</span>
                   </Link>
                 )}
-                {!isAccepted && !isAdmin && (
+                {!isAccepted && !isAdmin && !isFaculty && (
                   <button
                     type="button"
                     onClick={(e) => {

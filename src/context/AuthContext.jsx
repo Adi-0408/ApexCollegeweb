@@ -12,21 +12,26 @@ export function AuthProvider({ children }) {
   const [appStatus, setAppStatus] = useState(null);
   const [isAccepted, setIsAccepted] = useState(false);
   const [adminEmails, setAdminEmails] = useState(DEFAULT_ADMIN_EMAILS);
+  const [isFaculty, setIsFaculty] = useState(false);
 
   // Dynamic admin check against default master admins + Firestore assistant collection
   const userEmailLower = currentUser?.email ? currentUser.email.toLowerCase() : '';
   const isAdmin = !!(
     userEmailLower &&
+    !isFaculty &&
     (DEFAULT_ADMIN_EMAILS.includes(userEmailLower) || adminEmails.includes(userEmailLower))
   );
 
   useEffect(() => {
     let appUnsub = null;
     let asstUnsub = null;
+    let facUnsub = null;
 
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user && user.email) {
+        const uEmail = user.email.toLowerCase();
+
         // 1. Student Application Listener
         const q = query(collection(db, 'applications'), where('email', '==', user.email));
         appUnsub = onSnapshot(
@@ -71,13 +76,31 @@ export function AuthProvider({ children }) {
           },
           (err) => console.warn('Admin users listener warning:', err)
         );
+
+        // 3. Faculty Members Listener
+        facUnsub = onSnapshot(
+          collection(db, 'faculty_members'),
+          (snap) => {
+            let found = false;
+            snap.forEach((d) => {
+              const facEmail = (d.data().email || d.id || '').toLowerCase();
+              if (facEmail === uEmail) {
+                found = true;
+              }
+            });
+            setIsFaculty(found);
+          },
+          (err) => console.warn('Faculty listener warning:', err)
+        );
       } else {
         if (appUnsub) appUnsub();
         if (asstUnsub) asstUnsub();
+        if (facUnsub) facUnsub();
         setStudentApplication(null);
         setAppStatus(null);
         setIsAccepted(false);
         setAdminEmails(DEFAULT_ADMIN_EMAILS);
+        setIsFaculty(false);
       }
     });
 
@@ -85,6 +108,7 @@ export function AuthProvider({ children }) {
       unsub();
       if (appUnsub) appUnsub();
       if (asstUnsub) asstUnsub();
+      if (facUnsub) facUnsub();
     };
   }, []);
 
@@ -94,6 +118,7 @@ export function AuthProvider({ children }) {
         currentUser,
         isAuthenticated: !!currentUser,
         isAdmin,
+        isFaculty,
         adminEmails,
         isAccepted,
         appStatus,

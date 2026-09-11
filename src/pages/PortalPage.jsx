@@ -56,6 +56,7 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  getDoc,
   doc,
   serverTimestamp,
   query,
@@ -167,15 +168,30 @@ export default function PortalPage() {
   const profileUnsubRef = useRef(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      if (user) {
-        if (user.email && (ADMIN_EMAILS.includes(user.email.toLowerCase()) || DEFAULT_ADMIN_EMAILS.includes(user.email.toLowerCase()))) {
+      if (user && user.email) {
+        const cleanEmail = user.email.toLowerCase();
+        
+        // 1. Check if user is Faculty member -> Redirect to Faculty Console
+        try {
+          const facSnap = await getDoc(doc(db, 'faculty_members', cleanEmail));
+          if (facSnap.exists()) {
+            navigate('/faculty', { replace: true });
+            return;
+          }
+        } catch (err) {
+          console.warn('Faculty check in PortalPage:', err);
+        }
+
+        // 2. Check if user is Primary Admin -> Redirect to Admin Suite
+        if (ADMIN_EMAILS.includes(cleanEmail) || DEFAULT_ADMIN_EMAILS.includes(cleanEmail)) {
           if (sessionStorage.getItem('adminUnlocked') === 'true') {
             navigate('/admin');
             return;
           }
         }
+
         listenStudentData(user.email);
         listenProfileData(user.email);
         loadAcademicERP(user.email);
