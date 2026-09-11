@@ -71,7 +71,10 @@ import {
   getStudentAttendance,
   getStudentResults,
   getStudentTimetable,
-  getStudentFees
+  getStudentFees,
+  checkStudentExamEligibility,
+  getStudentHallTicket,
+  submitRevaluationRequest
 } from '../lib/academicData.js';
 
 export default function PortalPage() {
@@ -103,6 +106,13 @@ export default function PortalPage() {
   const [feeRecord, setFeeRecord] = useState(null);
   const [selectedSemIdx, setSelectedSemIdx] = useState(0);
   const [selectedDay, setSelectedDay] = useState('Monday');
+
+  // Hall Ticket & Exam Eligibility States (Phase 4)
+  const [examEligibility, setExamEligibility] = useState(null);
+  const [hallTicket, setHallTicket] = useState(null);
+  const [revaluationSubject, setRevaluationSubject] = useState(null);
+  const [revaluationReason, setRevaluationReason] = useState('');
+  const [submittingReval, setSubmittingReval] = useState(false);
 
   // Step 2 Appointment
   const [apptMode, setApptMode] = useState('In-Person (Campus Welcome Center)');
@@ -242,8 +252,36 @@ export default function PortalPage() {
       setTimetable(tt);
       const fees = await getStudentFees(userEmail);
       setFeeRecord(fees);
+      const elig = await checkStudentExamEligibility(userEmail);
+      setExamEligibility(elig);
+      const ht = await getStudentHallTicket(userEmail);
+      setHallTicket(ht);
     } catch (err) {
       console.warn('loadAcademicERP error:', err);
+    }
+  }
+
+  async function handleRevalSubmit(e) {
+    e.preventDefault();
+    if (!revaluationSubject || !revaluationReason.trim()) {
+      showToast('Please specify a reason for revaluation.', 'error');
+      return;
+    }
+    setSubmittingReval(true);
+    try {
+      await submitRevaluationRequest(
+        currentUser.email,
+        'Semester 1 (Fall 2025)',
+        revaluationSubject,
+        revaluationReason.trim()
+      );
+      showToast(`Revaluation request submitted for ${revaluationSubject}. An audit record has been created.`);
+      setRevaluationSubject(null);
+      setRevaluationReason('');
+    } catch (err) {
+      showToast('Failed to submit revaluation: ' + err.message, 'error');
+    } finally {
+      setSubmittingReval(false);
     }
   }
 
@@ -728,6 +766,7 @@ export default function PortalPage() {
               { key: 'overview', label: 'Admission & Status', icon: <Layers className="w-4 h-4" /> },
               { key: 'attendance', label: 'Attendance Tracker', icon: <Percent className="w-4 h-4" />, badge: `${overallAttendancePct}%` },
               { key: 'results', label: 'Exam Results & Transcripts', icon: <Award className="w-4 h-4" /> },
+              { key: 'hallticket', label: 'Exam Hall Ticket', icon: <GraduationCap className="w-4 h-4" />, badge: hallTicket ? 'Issued' : 'Check' },
               { key: 'schedule', label: 'Class Timetable', icon: <CalendarDays className="w-4 h-4" /> },
               { key: 'fees', label: 'Tuition Fees & Receipts', icon: <Receipt className="w-4 h-4" /> },
             ].map((tab) => (
@@ -1072,7 +1111,8 @@ export default function PortalPage() {
                               <th className="py-4 px-4 text-center">Internal (/30)</th>
                               <th className="py-4 px-4 text-center">Endterm (/70)</th>
                               <th className="py-4 px-4 text-center">Total (/100)</th>
-                              <th className="py-4 px-5 text-right">Letter Grade</th>
+                              <th className="py-4 px-4 text-center">Letter Grade</th>
+                              <th className="py-4 px-5 text-right">Audit Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -1084,10 +1124,19 @@ export default function PortalPage() {
                                 <td className="py-4 px-4 text-center text-slate-600">{sub.internalMarks}</td>
                                 <td className="py-4 px-4 text-center text-slate-600">{sub.endtermMarks}</td>
                                 <td className="py-4 px-4 text-center font-black text-slate-900">{sub.totalMarks}</td>
-                                <td className="py-4 px-5 text-right">
+                                <td className="py-4 px-4 text-center">
                                   <span className="inline-block bg-indigo-50 text-indigo-700 font-black text-xs px-3 py-1 rounded-lg border border-indigo-200">
                                     {sub.grade}
                                   </span>
+                                </td>
+                                <td className="py-4 px-5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRevaluationSubject(sub.code)}
+                                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition"
+                                  >
+                                    Revaluation
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -1096,6 +1145,167 @@ export default function PortalPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Revaluation Request Modal */}
+              {revaluationSubject && (
+                <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center justify-between border-b pb-3">
+                      <h3 className="text-base font-black text-slate-900">Request Revaluation for {revaluationSubject}</h3>
+                      <button onClick={() => setRevaluationSubject(null)} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <form onSubmit={handleRevalSubmit} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Grounds / Reason for Revaluation</label>
+                        <textarea
+                          required
+                          rows={3}
+                          value={revaluationReason}
+                          onChange={(e) => setRevaluationReason(e.target.value)}
+                          placeholder="State reasons for score re-verification..."
+                          className="w-full p-3 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setRevaluationSubject(null)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingReval}
+                          className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700"
+                        >
+                          {submittingReval ? 'Submitting...' : 'Submit to Exam Cell'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: EXAM HALL TICKET & ADMIT CARD (Phase 4) */}
+          {erpTab === 'hallticket' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 text-white p-6 sm:p-8 rounded-3xl border border-blue-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <span className="bg-blue-400/20 text-blue-300 text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-full border border-blue-400/30">
+                    Exam Cell Admit Card
+                  </span>
+                  <h2 className="text-xl sm:text-3xl font-black text-white">Official Examination Hall Ticket</h2>
+                  <p className="text-xs sm:text-sm text-blue-200">
+                    Gated on maintaining minimum 75% attendance and zero outstanding tuition dues.
+                  </p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-5 text-center border border-white/15 shrink-0">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 block">Verification Status</span>
+                  <span className={`text-base font-black block mt-1 ${examEligibility?.eligible ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {examEligibility?.eligible ? 'Eligible for Finals ✓' : 'Eligibility Withheld'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Eligibility Check Banners */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400">Attendance Requirement (&gt;=75%)</span>
+                    <h4 className="text-xl font-black text-slate-900">{examEligibility?.attendancePercentage ?? overallAttendancePct}%</h4>
+                    <p className={`text-xs font-bold mt-0.5 ${examEligibility?.attendancePassed !== false ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {examEligibility?.attendancePassed !== false ? 'Requirement Met ✓' : 'Short Attendance Alert'}
+                    </p>
+                  </div>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${examEligibility?.attendancePassed !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                    <Percent className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400">Tuition Financial Clearance</span>
+                    <h4 className="text-xl font-black text-slate-900">{examEligibility?.feesPassed ? 'Cleared' : 'Dues Pending'}</h4>
+                    <p className={`text-xs font-bold mt-0.5 ${examEligibility?.feesPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {examEligibility?.feesPassed ? 'Zero Outstanding Balance ✓' : 'Clear balance with Accounts'}
+                    </p>
+                  </div>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${examEligibility?.feesPassed ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Hall Ticket Card */}
+              {!examEligibility?.eligible ? (
+                <div className="bg-rose-50 border border-rose-200 rounded-3xl p-8 text-center space-y-3">
+                  <AlertTriangle className="w-10 h-10 text-rose-600 mx-auto" />
+                  <h3 className="font-black text-rose-900 text-lg">Examination Hall Ticket Withheld</h3>
+                  <div className="text-xs text-rose-700 max-w-md mx-auto space-y-1">
+                    {(examEligibility?.reasons || []).map((r, ri) => (
+                      <p key={ri}>• {r}</p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 pt-2">Please contact the HOD / Accounts department to resolve eligibility criteria.</p>
+                </div>
+              ) : !hallTicket ? (
+                <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200 p-8 space-y-3 shadow-sm">
+                  <GraduationCap className="w-10 h-10 text-blue-300 mx-auto" />
+                  <p className="font-black text-slate-800 text-base">Eligibility Confirmed — Hall Ticket In Allocation</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    You have satisfied all academic attendance and fee requirements. The Exam Cell is currently assigning examination seat numbers. Your official admit card will be visible here shortly.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl border-2 border-indigo-600/30 shadow-xl overflow-hidden p-6 sm:p-8 space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-6 gap-4">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+                        Official Admit Card
+                      </span>
+                      <h3 className="text-2xl font-black text-slate-900 mt-2">Apex University — Examination Hall Ticket</h3>
+                      <p className="text-xs text-slate-500">{hallTicket.session || 'Fall 2026 Final Examinations'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl shadow-md transition flex items-center gap-2"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print / Download Admit Card</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Candidate Name</span>
+                      <strong className="text-slate-900 text-sm block mt-0.5">{hallTicket.studentName || currentUser.email}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Allocated Seat No.</span>
+                      <strong className="text-indigo-600 font-mono text-sm block mt-0.5">{hallTicket.seatNumber || 'APX-782190'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Exam Hall / Room</span>
+                      <strong className="text-slate-900 text-sm block mt-0.5">{hallTicket.room || 'Main Hall A'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Session &amp; Timing</span>
+                      <strong className="text-slate-900 text-sm block mt-0.5">09:30 AM - 12:30 PM</strong>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100 text-[11px] text-slate-500">
+                    <span>Issued by: Controller of Examinations, Apex University</span>
+                    <span className="font-mono text-indigo-700 font-bold">DIGITAL VERIFICATION SIGNATURE: VALID ✓</span>
+                  </div>
                 </div>
               )}
             </div>

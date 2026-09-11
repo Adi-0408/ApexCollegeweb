@@ -42,7 +42,11 @@ import {
   Key,
   ShieldAlert,
   Lock,
-  Unlock
+  Unlock,
+  CreditCard,
+  FileText,
+  CheckCheck,
+  FileCheck
 } from 'lucide-react';
 import {
   auth,
@@ -53,11 +57,15 @@ import {
   collection,
   getDocs,
   getDoc,
+  setDoc,
+  addDoc,
   updateDoc,
   deleteDoc,
   doc,
   query,
+  where,
   orderBy,
+  serverTimestamp,
   createAssistantUser,
   createFacultyUser
 } from '../lib/firebase.js';
@@ -72,12 +80,25 @@ import {
 import { sendApplicationStatusEmail } from '../lib/email.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { useAuth, DEFAULT_ADMIN_EMAILS } from '../context/AuthContext.jsx';
-import { getFacultyList, saveFacultyMember, deleteFacultyMember } from '../lib/academicData.js';
+import {
+  getFacultyList,
+  saveFacultyMember,
+  deleteFacultyMember,
+  getStudentFees,
+  saveStudentFees,
+  checkStudentExamEligibility,
+  issueHallTicket,
+  signOffSemesterResults,
+  publishSemesterResults,
+  getAcademicConfig,
+  saveAcademicConfig
+} from '../lib/academicData.js';
+import { ROLES, ROLE_CATALOG, roleLabel } from '../lib/roles.js';
 import emailjs from '@emailjs/browser';
 
 export default function AdminPage() {
   const { showToast } = useToast();
-  const { currentUser, adminEmails } = useAuth();
+  const { currentUser, adminEmails, staffRole, staffProfile, can } = useAuth();
   const navigate = useNavigate();
   const [unlocked, setUnlocked] = useState(false);
   const [adminEmail, setAdminEmail] = useState('adityapatil.4132@gmail.com');
@@ -126,10 +147,36 @@ export default function AdminPage() {
   const [facEmail, setFacEmail] = useState('');
   const [facPass, setFacPass] = useState('');
   const [facDept, setFacDept] = useState('Computer Science & AI');
-  const [facRole, setFacRole] = useState('Professor');
+  const [facRole, setFacRole] = useState('Teacher');
   const [facSubject, setFacSubject] = useState('');
   const [facSaving, setFacSaving] = useState(false);
   const [showFacPassMap, setShowFacPassMap] = useState({});
+
+  // Accounts & Fee Ledger States (Phase 2)
+  const [feesList, setFeesList] = useState([]);
+  const [feesLoading, setFeesLoading] = useState(false);
+  const [feeStudentEmail, setFeeStudentEmail] = useState('');
+  const [feeTuition, setFeeTuition] = useState(12500);
+  const [feePaid, setFeePaid] = useState(12500);
+  const [feeStatus, setFeeStatus] = useState('Cleared');
+  const [feeSaving, setFeeSaving] = useState(false);
+
+  // Examinations & Hall Tickets States (Phase 4)
+  const [examCandidates, setExamCandidates] = useState([]);
+  const [examsLoading, setExamsLoading] = useState(false);
+  const [hallTicketIssuing, setHallTicketIssuing] = useState(false);
+  const [examRoom, setExamRoom] = useState('Hall A - Main Auditorium');
+  const [examSession, setExamSession] = useState('Fall 2026 Final Examinations');
+
+  // Results & Principal Sign-Off States (Phase 5)
+  const [resultsList, setResultsList] = useState([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [signOffLoading, setSignOffLoading] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
+
+  // Results Audit Trail States
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   function toggleFacPassVisibility(facId) {
     setShowFacPassMap((prev) => ({ ...prev, [facId]: !prev[facId] }));
@@ -175,13 +222,29 @@ export default function AdminPage() {
   }
 
   async function handleDeleteFaculty(facId) {
-    if (!window.confirm('Are you sure you want to remove this faculty record?')) return;
+    if (!window.confirm('Are you sure you want to remove this faculty/staff record?')) return;
     try {
       await deleteFacultyMember(facId);
-      showToast('Faculty member removed.');
+      // Also remove from admin_users collection
+      try { await deleteDoc(doc(db, 'admin_users', facId)); } catch (_) {}
+      showToast('Staff member removed.');
       loadFaculty();
     } catch (err) {
-      showToast('Failed to remove faculty: ' + err.message, 'error');
+      showToast('Failed to remove staff member: ' + err.message, 'error');
+    }
+  }
+
+  async function handleChangeRole(facId, newRole) {
+    try {
+      await updateDoc(doc(db, 'faculty_members', facId), { role: newRole });
+      // Also update in admin_users
+      try {
+        await updateDoc(doc(db, 'admin_users', facId), { role: `Faculty (${newRole})` });
+      } catch (_) {}
+      showToast(`Role updated to "${newRole}" successfully!`);
+      loadFaculty();
+    } catch (err) {
+      showToast('Failed to update role: ' + err.message, 'error');
     }
   }
 
@@ -238,6 +301,172 @@ export default function AdminPage() {
     loadCms();
     loadAssistants();
     loadFaculty();
+    loadFees();
+    loadExamEligibility();
+    loadResultsSummary();
+    loadAuditLogs();
+  }
+
+  // --- ACCOUNTS & FEES HANDLERS (Phase 2) ---
+  async function loadFees() {
+    setFeesLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'student_fees'));
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setFeesList(list);
+    } catch (err) {
+      console.warn('loadFees error:', err);
+    } finally {
+      setFeesLoading(false);
+    }
+  }
+
+  async function handleSaveFee(e) {
+    e.preventDefault();
+    if (!feeStudentEmail) {
+      showToast('Please select or enter a student email.', 'error');
+      return;
+    }
+    setFeeSaving(true);
+    try {
+      const tuition = Number(feeTuition) || 0;
+      const paid = Number(feePaid) || 0;
+      const pending = Math.max(0, tuition - paid);
+      const status = pending === 0 ? 'Cleared' : (paid > 0 ? 'Partial' : 'Pending');
+      await saveStudentFees(feeStudentEmail, {
+        studentEmail: feeStudentEmail.toLowerCase(),
+        totalTuition: tuition,
+        paidAmount: paid,
+        pendingDues: pending,
+        status,
+        updatedBy: currentUser?.email || 'Accounts',
+      });
+      showToast(`Fee ledger updated for ${feeStudentEmail} (Status: ${status})`);
+      await loadFees();
+      await loadExamEligibility();
+    } catch (err) {
+      showToast('Failed to save fee: ' + err.message, 'error');
+    } finally {
+      setFeeSaving(false);
+    }
+  }
+
+  // --- EXAMINATIONS & HALL TICKETS (Phase 4) ---
+  async function loadExamEligibility() {
+    setExamsLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'applications'));
+      const list = [];
+      for (const d of snap.docs) {
+        const app = d.data();
+        if (app.email) {
+          const elig = await checkStudentExamEligibility(app.email);
+          const ht = await getStudentHallTicket(app.email);
+          list.push({
+            id: d.id,
+            ...app,
+            eligibility: elig,
+            hallTicketIssued: !!ht,
+            hallTicket: ht,
+          });
+        }
+      }
+      setExamCandidates(list);
+    } catch (err) {
+      console.warn('loadExamEligibility error:', err);
+    } finally {
+      setExamsLoading(false);
+    }
+  }
+
+  async function handleIssueHallTicket(studentEmail, candidateName, prog) {
+    setHallTicketIssuing(true);
+    try {
+      const seatNo = `APX-${Math.floor(100000 + Math.random() * 900000)}`;
+      await issueHallTicket(studentEmail, {
+        studentEmail: studentEmail.toLowerCase(),
+        studentName: candidateName || 'Student',
+        program: prog || 'Undergraduate',
+        seatNumber: seatNo,
+        room: examRoom,
+        session: examSession,
+        semester: 'Fall 2026',
+        issuedBy: currentUser?.email || 'Exam Cell',
+      });
+      showToast(`Hall ticket issued for ${studentEmail} (Seat: ${seatNo})`);
+      await loadExamEligibility();
+    } catch (err) {
+      showToast('Failed to issue hall ticket: ' + err.message, 'error');
+    } finally {
+      setHallTicketIssuing(false);
+    }
+  }
+
+  // --- RESULTS & APPROVAL GATES (Phase 5) ---
+  async function loadResultsSummary() {
+    setResultsLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'exam_results'));
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setResultsList(list);
+    } catch (err) {
+      console.warn('loadResultsSummary error:', err);
+    } finally {
+      setResultsLoading(false);
+    }
+  }
+
+  async function handleSignOffResults() {
+    if (!window.confirm('As Principal / Dean, do you officially sign off on semester Fall 2026 results? (Approval Gate 2)')) return;
+    setSignOffLoading(true);
+    try {
+      await signOffSemesterResults('Semester 1 (Fall 2025)', currentUser?.email || 'Principal');
+      showToast('Approval Gate 2 passed: Results signed off by Principal / Dean!');
+      await loadResultsSummary();
+      await loadAuditLogs();
+    } catch (err) {
+      showToast('Sign-off failed: ' + err.message, 'error');
+    } finally {
+      setSignOffLoading(false);
+    }
+  }
+
+  async function handlePublishResults() {
+    if (!window.confirm('Publish all signed-off results to student portals now?')) return;
+    setPublishLoading(true);
+    try {
+      await publishSemesterResults('Semester 1 (Fall 2025)', currentUser?.email || 'Exam Cell');
+      showToast('Results officially published to student portals!');
+      await loadResultsSummary();
+      await loadAuditLogs();
+    } catch (err) {
+      showToast('Publishing failed: ' + err.message, 'error');
+    } finally {
+      setPublishLoading(false);
+    }
+  }
+
+  // --- AUDIT TRAIL LOGS ---
+  async function loadAuditLogs() {
+    setAuditLoading(true);
+    try {
+      const q = query(collection(db, 'results_audit_trail'), orderBy('timestamp', 'desc'));
+      const snap = await getDocs(q);
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setAuditLogs(list);
+    } catch (err) {
+      try {
+        const snap = await getDocs(collection(db, 'results_audit_trail'));
+        const list = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+        setAuditLogs(list.reverse());
+      } catch (_) {}
+    } finally {
+      setAuditLoading(false);
+    }
   }
 
   async function loadApplications() {
@@ -522,15 +751,26 @@ export default function AdminPage() {
   const pendingCount = applications.filter((a) => !a.status || a.status.toLowerCase() === 'pending').length;
   const rejectedCount = applications.filter((a) => (a.status || '').toLowerCase() === 'rejected').length;
   const programsCount = programs.length;
-  const assistantsCount = assistants.length;
+  const staffCount = facultyList.length;
 
-  const tabs = [
-    { key: 'applications', label: 'Candidate Admissions', icon: <Users className="w-4 h-4" />, count: totalAppsCount },
-    { key: 'programs', label: 'Degree Majors', icon: <BookOpen className="w-4 h-4" />, count: programsCount },
-    { key: 'cms', label: 'Website CMS', icon: <LayoutTemplate className="w-4 h-4" /> },
-    { key: 'assistants', label: 'Staff & Assistants', icon: <UserPlus className="w-4 h-4" />, count: assistantsCount },
-    { key: 'faculty', label: 'Faculty Roster', icon: <Building2 className="w-4 h-4" /> },
+  const allTabs = [
+    { key: 'applications', label: 'Candidate Admissions', icon: <Users className="w-4 h-4" />, count: totalAppsCount, permission: 'admissions' },
+    { key: 'staff', label: 'Staff & Faculty', icon: <UserPlus className="w-4 h-4" />, count: staffCount, permission: 'staff_accounts' },
+    { key: 'fees', label: 'Accounts & Fees', icon: <CreditCard className="w-4 h-4" />, count: feesList.length, permission: 'fees' },
+    { key: 'exams', label: 'Exam Cell & Hall Tickets', icon: <GraduationCap className="w-4 h-4" />, count: examCandidates.length, permission: 'exams' },
+    { key: 'results', label: 'Results & Sign-Off', icon: <CheckCheck className="w-4 h-4" />, count: resultsList.length, permission: 'results_signoff' },
+    { key: 'audit', label: 'Audit Trail & Logs', icon: <Clock className="w-4 h-4" />, count: auditLogs.length, permission: 'audit_trail' },
+    { key: 'programs', label: 'Degree Majors', icon: <BookOpen className="w-4 h-4" />, count: programsCount, permission: 'programs' },
+    { key: 'cms', label: 'Website CMS', icon: <LayoutTemplate className="w-4 h-4" />, permission: 'cms' },
   ];
+
+  const tabs = allTabs.filter((t) => !t.permission || can(t.permission));
+
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((t) => t.key === activeTab)) {
+      setActiveTab(tabs[0].key);
+    }
+  }, [tabs, activeTab]);
 
   // Helper to split program string nicely
   function parseProgramDisplay(progStr = '') {
@@ -670,9 +910,9 @@ export default function AdminPage() {
 
         <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600">Staff &amp; Assistants</span>
-            <h3 className="text-xl sm:text-3xl font-black text-indigo-600">{assistantsCount}</h3>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate">Active Team Users</p>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600">Staff &amp; Faculty</span>
+            <h3 className="text-xl sm:text-3xl font-black text-indigo-600">{staffCount}</h3>
+            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate">Active Members</p>
           </div>
           <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-50 text-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
             <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1649,18 +1889,18 @@ export default function AdminPage() {
         </form>
       )}
 
-      {/* TAB 4: STAFF & ASSISTANT USER AUTHORITY MANAGEMENT */}
-      {activeTab === 'assistants' && (
+      {/* TAB 4: UNIFIED STAFF & FACULTY MANAGEMENT */}
+      {activeTab === 'staff' && (
         <div className="space-y-6 sm:space-y-8 animate-in fade-in">
-          {/* Header & Explanatory Card */}
+          {/* Header Banner */}
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2 relative z-10 max-w-2xl">
               <span className="bg-indigo-500/20 text-indigo-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-indigo-500/30 inline-block">
-                Staff &amp; Assistant User Management
+                Staff &amp; Faculty Management
               </span>
-              <h2 className="text-xl sm:text-3xl font-black text-white">Delegate Admin Authority</h2>
+              <h2 className="text-xl sm:text-3xl font-black text-white">Manage All Staff &amp; Faculty</h2>
               <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-                Create assistant accounts for your team members. Provide them with the Email and Password below so they can log into the Admin Console to review applications, schedule verification interviews, and manage catalog data.
+                Register teachers, faculty heads, sub admins, and admin staff. Assign roles, course codes, departments, and login credentials — all from one place.
               </p>
             </div>
             <div className="w-16 h-16 rounded-2xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0 relative z-10 shadow-lg">
@@ -1668,197 +1908,20 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Create Assistant Form Card */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-            <div className="flex items-center gap-2 text-indigo-600 border-b pb-4">
-              <UserPlus className="w-5 h-5" />
-              <h3 className="text-base sm:text-lg font-black text-slate-900">Create New Assistant Account</h3>
-            </div>
-
-            <form onSubmit={handleCreateAssistant} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assistant Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={asstName}
-                    onChange={(e) => setAsstName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Role Title *</label>
-                  <input
-                    type="text"
-                    required
-                    value={asstRole}
-                    onChange={(e) => setAsstRole(e.target.value)}
-                    placeholder="e.g. Admissions Coordinator"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assistant Email *</label>
-                  <input
-                    type="email"
-                    required
-                    value={asstEmail}
-                    onChange={(e) => setAsstEmail(e.target.value)}
-                    placeholder="assistant@apex.edu"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Assign Password * (Min 6 chars)</label>
-                  <input
-                    type="text"
-                    required
-                    minLength={6}
-                    value={asstPass}
-                    onChange={(e) => setAsstPass(e.target.value)}
-                    placeholder="e.g. pass123456"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-[11px] text-slate-500 font-medium italic">
-                  💡 Note: Share these credentials with the assistant so they can access the Admin Console.
-                </p>
-                <button
-                  type="submit"
-                  disabled={asstSaving}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-7 py-3 rounded-xl text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition flex items-center gap-2 disabled:opacity-60"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>{asstSaving ? 'Registering Account...' : 'Create Assistant Account'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Active Assistant Staff Roster */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b pb-4">
-              <div className="flex items-center gap-2 text-indigo-600">
-                <Shield className="w-5 h-5" />
-                <h3 className="text-base sm:text-lg font-black text-slate-900">Active Authorized Assistant Staff ({assistants.length})</h3>
-              </div>
-              <button
-                type="button"
-                onClick={loadAssistants}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${asstLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh List</span>
-              </button>
-            </div>
-
-            {asstLoading ? (
-              <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
-                <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
-                <span>Loading assistant staff roster...</span>
-              </div>
-            ) : assistants.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
-                <UserPlus className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="font-bold text-slate-700 text-sm">No Assistant Accounts Created Yet</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Use the form above to add assistants (e.g. staff members, admissions coordinators) who can help manage candidate applications.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                {assistants.map((asst) => (
-                  <div
-                    key={asst.id}
-                    className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between hover:border-indigo-200 transition"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
-                          {asst.name ? asst.name[0].toUpperCase() : 'A'}
-                        </div>
-                        <div className="space-y-0.5">
-                          <h4 className="font-black text-slate-900 text-base">{asst.name || 'Assistant User'}</h4>
-                          <span className="text-[10px] font-extrabold uppercase text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-100 inline-block">
-                            {asst.role || 'Admissions Assistant'}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2.5 py-1 rounded-full uppercase flex items-center gap-1 shrink-0">
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        Active Admin
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Assistant Email:</span>
-                        <strong className="text-slate-900 font-mono text-xs">{asst.email}</strong>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Assigned Password:</span>
-                        <div className="flex items-center gap-1.5">
-                          <strong className="text-slate-900 font-mono text-xs">
-                            {showPassMap[asst.id] ? asst.initialPassword || '******' : '••••••••'}
-                          </strong>
-                          <button
-                            type="button"
-                            onClick={() => togglePassVisibility(asst.id)}
-                            className="text-slate-400 hover:text-slate-700 p-0.5"
-                            title="Toggle password view"
-                          >
-                            {showPassMap[asst.id] ? <Lock className="w-3 h-3 text-indigo-600" /> : <Unlock className="w-3 h-3" />}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px] text-slate-400">
-                        <span>Created by: {asst.createdBy || 'Admin'}</span>
-                        <span>{asst.createdAt?.toDate ? asst.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-1 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleRevokeAssistant(asst.id)}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-4 py-2 rounded-xl border border-rose-200 transition flex items-center gap-1.5 active:scale-95"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Revoke Admin Access</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: FACULTY & PROFESSOR ROSTER */}
-      {activeTab === 'faculty' && (
-        <div className="space-y-6">
+          {/* Create New Staff / Faculty Form */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center gap-3 border-b pb-4">
               <Building2 className="w-6 h-6 text-indigo-600" />
               <div>
-                <h3 className="text-xl font-black text-slate-900">Register New Faculty Member / Professor</h3>
-                <p className="text-xs text-slate-500">Assign course subjects and department affiliations to academic staff.</p>
+                <h3 className="text-xl font-black text-slate-900">Register New Staff / Faculty Member</h3>
+                <p className="text-xs text-slate-500">Assign a role, department, course subjects, and login credentials.</p>
               </div>
             </div>
 
             <form onSubmit={handleAddFaculty} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Name *</label>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Full Name *</label>
                   <input
                     type="text"
                     required
@@ -1869,13 +1932,13 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Email *</label>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Staff Email *</label>
                   <input
                     type="email"
                     required
                     value={facEmail}
                     onChange={(e) => setFacEmail(e.target.value)}
-                    placeholder="e.g. robert.miller@apex.edu"
+                    placeholder="e.g. robert@apex.edu"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -1887,7 +1950,7 @@ export default function AdminPage() {
                     minLength={6}
                     value={facPass}
                     onChange={(e) => setFacPass(e.target.value)}
-                    placeholder="e.g. prof123456"
+                    placeholder="e.g. pass123456"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -1906,17 +1969,20 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Academic Role / Designation</label>
-                  <input
-                    type="text"
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Role / Designation *</label>
+                  <select
                     value={facRole}
                     onChange={(e) => setFacRole(e.target.value)}
-                    placeholder="e.g. Professor & Lab Director"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
+                  >
+                    <option value="Teacher">Teacher</option>
+                    <option value="Faculty Head">Faculty Head</option>
+                    <option value="Sub Admin">Sub Admin</option>
+                    <option value="Admin">Admin</option>
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assigned Course Code(s) (Separate Multiple with Comma)</label>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assigned Course Code(s) (Comma Separated)</label>
                   <input
                     type="text"
                     value={facSubject}
@@ -1927,84 +1993,657 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={facSaving}
-                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>{facSaving ? 'Creating Faculty Account...' : 'Create & Provision Faculty Account'}</span>
-              </button>
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-[11px] text-slate-500 font-medium italic">
+                  💡 Share these credentials with the staff member so they can access the Faculty / Admin Console.
+                </p>
+                <button
+                  type="submit"
+                  disabled={facSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>{facSaving ? 'Creating Account...' : 'Create & Provision Account'}</span>
+                </button>
+              </div>
             </form>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {facultyList.map((fac) => {
-              const subjectsList = Array.isArray(fac.assignedSubjects)
-                ? fac.assignedSubjects
-                : typeof fac.assignedSubject === 'string'
-                ? fac.assignedSubject.split(',').map((s) => s.trim()).filter(Boolean)
-                : ['General Course'];
+          {/* Active Staff & Faculty Roster */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Shield className="w-5 h-5" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900">Active Staff &amp; Faculty Members ({facultyList.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={loadFaculty}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Refresh List</span>
+              </button>
+            </div>
 
-              return (
-                <div key={fac.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between hover:shadow-lg transition">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-                        {fac.department || 'Academic Dept'}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-400">{fac.role || 'Professor'}</span>
-                    </div>
+            {facultyList.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                <UserPlus className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No Staff or Faculty Registered Yet</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Use the form above to add faculty, teachers, HODs, sub admins, exam cell, accounts, or admin accounts.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {facultyList.map((fac) => {
+                  const subjectsList = Array.isArray(fac.assignedSubjects)
+                    ? fac.assignedSubjects
+                    : typeof fac.assignedSubject === 'string'
+                    ? fac.assignedSubject.split(',').map((s) => s.trim()).filter(Boolean)
+                    : [];
 
-                    <div>
-                      <h4 className="font-black text-slate-900 text-lg">{fac.name}</h4>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">{fac.email}</p>
-                    </div>
+                  const currentRole = fac.role || fac.systemRole || 'Teacher';
+                  const roleColors = {
+                    'Super Admin': 'bg-purple-50 text-purple-700 border-purple-200',
+                    'Admin': 'bg-rose-50 text-rose-700 border-rose-200',
+                    'Sub Admin': 'bg-amber-50 text-amber-700 border-amber-200',
+                    'Registrar': 'bg-amber-50 text-amber-700 border-amber-200',
+                    'Principal': 'bg-yellow-50 text-yellow-800 border-yellow-200',
+                    'HOD': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    'Faculty Head': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    'Exam Cell': 'bg-blue-50 text-blue-700 border-blue-200',
+                    'Accounts': 'bg-teal-50 text-teal-700 border-teal-200',
+                    'Teacher': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    'Faculty': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                  };
+                  const roleBadgeClass = roleColors[currentRole] || 'bg-slate-50 text-slate-700 border-slate-200';
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-[11px]">Assigned Password:</span>
-                        <div className="flex items-center gap-1.5">
-                          <strong className="text-slate-900 font-mono text-xs">
-                            {showFacPassMap[fac.id] ? fac.initialPassword || '******' : '••••••••'}
-                          </strong>
-                          <button
-                            type="button"
-                            onClick={() => toggleFacPassVisibility(fac.id)}
-                            className="text-slate-400 hover:text-slate-700 p-0.5"
-                            title="Toggle password view"
+                  return (
+                    <div
+                      key={fac.id}
+                      className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between hover:border-indigo-200 transition"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
+                            {fac.name ? fac.name[0].toUpperCase() : 'S'}
+                          </div>
+                          <div className="space-y-0.5">
+                            <h4 className="font-black text-slate-900 text-base">{fac.name || 'Staff Member'}</h4>
+                            <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded border inline-block ${roleBadgeClass}`}>
+                              {currentRole}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 shrink-0">
+                          {fac.department || 'Academic Dept'}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400 text-[11px]">Staff Email:</span>
+                          <strong className="text-slate-900 font-mono text-xs">{fac.email}</strong>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400 text-[11px]">Assigned Password:</span>
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-slate-900 font-mono text-xs">
+                              {showFacPassMap[fac.id] ? fac.initialPassword || '******' : '••••••••'}
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => toggleFacPassVisibility(fac.id)}
+                              className="text-slate-400 hover:text-slate-700 p-0.5"
+                              title="Toggle password view"
+                            >
+                              {showFacPassMap[fac.id] ? <Lock className="w-3 h-3 text-indigo-600" /> : <Unlock className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Authority Role Selector */}
+                        <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                          <span className="text-slate-500 font-bold text-[11px]">Change Role:</span>
+                          <select
+                            value={currentRole}
+                            onChange={(e) => handleChangeRole(fac.id, e.target.value)}
+                            className="px-2 py-1 rounded-lg border border-slate-300 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
                           >
-                            {showFacPassMap[fac.id] ? <Lock className="w-3 h-3 text-indigo-600" /> : <Unlock className="w-3 h-3" />}
-                          </button>
+                            <option value="Teacher">Teacher (Faculty)</option>
+                            <option value="Faculty Head">Faculty Head (HOD)</option>
+                            <option value="Sub Admin">Sub Admin (Registrar)</option>
+                            <option value="Admin">Admin (Super Admin)</option>
+                            <option value="Principal">Principal / Dean</option>
+                            <option value="Exam Cell">Exam Cell</option>
+                            <option value="Accounts">Accounts</option>
+                          </select>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px] text-slate-400">
+                          <span>Created by: {fac.createdBy || 'Admin'}</span>
+                          <span>{fac.createdAt?.toDate ? fac.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
                         </div>
                       </div>
-                    </div>
 
-                    <div>
-                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1.5">Assigned Courses &amp; Subjects ({subjectsList.length})</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {subjectsList.map((subj, sIdx) => (
-                          <span key={sIdx} className="bg-indigo-50 text-indigo-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-indigo-100">
-                            📚 {subj}
+                      {/* Assigned Courses / Subjects */}
+                      {subjectsList.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1.5">
+                            Assigned Courses &amp; Subjects ({subjectsList.length})
                           </span>
-                        ))}
+                          <div className="flex flex-wrap gap-1.5">
+                            {subjectsList.map((subj, sIdx) => (
+                              <span key={sIdx} className="bg-indigo-50 text-indigo-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-indigo-100">
+                                📚 {subj}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-slate-100 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFaculty(fac.id)}
+                          className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3.5 py-2 rounded-xl border border-rose-200 transition flex items-center gap-1.5 active:scale-95"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove Staff Record</span>
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-                  <div className="pt-3 border-t border-slate-100 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFaculty(fac.id)}
-                      className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3.5 py-2 rounded-xl border border-rose-200 transition flex items-center gap-1.5 active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Remove Faculty</span>
-                    </button>
-                  </div>
+      {/* TAB 5: ACCOUNTS & FEE COLLECTION (Phase 2) */}
+      {activeTab === 'fees' && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-950 text-white p-6 sm:p-8 rounded-3xl border border-teal-800/60 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <span className="bg-teal-500/20 text-teal-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-teal-500/30 inline-block">
+                Accounts &amp; Finance Desk (Phase 2)
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black">Fee Structure, Invoicing &amp; Clearance</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Generate tuition invoices, record student payments, and issue fee clearances. Exam hall tickets are automatically gated on zero outstanding dues.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-teal-600/30 text-teal-400 flex items-center justify-center border border-teal-500/30 shrink-0 shadow-lg">
+              <CreditCard className="w-8 h-8" />
+            </div>
+          </div>
+
+          {/* Record / Update Fee Form */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 border-b pb-4">
+              <CreditCard className="w-6 h-6 text-teal-600" />
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Record Tuition Fee &amp; Issue Receipt</h3>
+                <p className="text-xs text-slate-500">Update tuition structure and clear student dues for examination eligibility.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveFee} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Select Student Email *</label>
+                  <input
+                    type="email"
+                    required
+                    list="student-emails-list"
+                    value={feeStudentEmail}
+                    onChange={(e) => setFeeStudentEmail(e.target.value)}
+                    placeholder="student@apex.edu"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  />
+                  <datalist id="student-emails-list">
+                    {applications.map((a) => (
+                      <option key={a.id} value={a.email}>
+                        {a.firstName} {a.lastName} ({a.email})
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
-              );
-            })}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Total Semester Tuition ($) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={feeTuition}
+                    onChange={(e) => setFeeTuition(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Amount Paid ($) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={feePaid}
+                    onChange={(e) => setFeePaid(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs text-slate-500">
+                  Calculated Pending Balance: <strong className="text-rose-600">${Math.max(0, Number(feeTuition) - Number(feePaid))}</strong>
+                </span>
+                <button
+                  type="submit"
+                  disabled={feeSaving}
+                  className="bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{feeSaving ? 'Updating Ledger...' : 'Save & Update Fee Ledger'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Fee Ledgers List */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center gap-2 text-teal-600">
+                <ShieldCheck className="w-5 h-5" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900">Student Fee Records ({feesList.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={loadFees}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-teal-600" />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {feesList.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                <CreditCard className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No Student Fee Ledgers Recorded</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Use the form above to record student tuition fees or mark payments as cleared.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                      <th className="py-3.5 px-4">Student Email</th>
+                      <th className="py-3.5 px-4">Total Tuition</th>
+                      <th className="py-3.5 px-4">Amount Paid</th>
+                      <th className="py-3.5 px-4">Pending Dues</th>
+                      <th className="py-3.5 px-4 text-center">Status</th>
+                      <th className="py-3.5 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {feesList.map((f) => (
+                      <tr key={f.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{f.studentEmail || f.id}</td>
+                        <td className="py-3.5 px-4 font-bold">${f.totalTuition || 0}</td>
+                        <td className="py-3.5 px-4 text-emerald-600 font-bold">${f.paidAmount || 0}</td>
+                        <td className="py-3.5 px-4 text-rose-600 font-bold">${f.pendingDues || 0}</td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                            f.status === 'Cleared' || f.status === 'Paid'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            {f.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFeeStudentEmail(f.studentEmail || f.id);
+                              setFeeTuition(f.totalTuition || 12500);
+                              setFeePaid(f.totalTuition || 12500);
+                            }}
+                            className="text-xs font-bold text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border border-teal-200 transition"
+                          >
+                            Mark 100% Cleared
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: EXAM CELL & HALL TICKETS (Phase 4) */}
+      {activeTab === 'exams' && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 text-white p-6 sm:p-8 rounded-3xl border border-blue-800/60 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <span className="bg-blue-500/20 text-blue-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-blue-500/30 inline-block">
+                Exam Cell Controller (Phase 4)
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black">Examination Scheduling &amp; Hall Ticket Gating</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Automated eligibility verification: students must maintain <strong>&gt;= 75% attendance</strong> and have <strong>zero unpaid fee dues</strong> to receive official hall tickets.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-blue-600/30 text-blue-400 flex items-center justify-center border border-blue-500/30 shrink-0 shadow-lg">
+              <GraduationCap className="w-8 h-8" />
+            </div>
+          </div>
+
+          {/* Exam Session Config */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span>Current Examination Session Parameters</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Session Title</label>
+                <input
+                  type="text"
+                  value={examSession}
+                  onChange={(e) => setExamSession(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Assigned Examination Hall</label>
+                <input
+                  type="text"
+                  value={examRoom}
+                  onChange={(e) => setExamRoom(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Candidate Eligibility & Hall Tickets Table */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900">Candidate Eligibility Verification</h3>
+                <p className="text-xs text-slate-500">Real-time cross check of attendance records and financial clearance.</p>
+              </div>
+              <button
+                type="button"
+                onClick={loadExamEligibility}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+                <span>Re-Check All</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                    <th className="py-3.5 px-4">Candidate</th>
+                    <th className="py-3.5 px-4">Program</th>
+                    <th className="py-3.5 px-4 text-center">Attendance %</th>
+                    <th className="py-3.5 px-4 text-center">Fees Status</th>
+                    <th className="py-3.5 px-4 text-center">Eligibility Gate</th>
+                    <th className="py-3.5 px-4 text-right">Hall Ticket</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {examCandidates.map((c) => {
+                    const elig = c.eligibility || { eligible: true, attendancePercentage: 100 };
+                    const isEligible = elig.eligible;
+
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{c.firstName} {c.lastName}</div>
+                          <div className="font-mono text-[11px] text-slate-400">{c.email}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 font-semibold">{c.program || 'Undergraduate'}</td>
+                        <td className="py-3.5 px-4 text-center font-bold">
+                          <span className={elig.attendancePercentage >= 75 ? 'text-emerald-600' : 'text-rose-600'}>
+                            {elig.attendancePercentage}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                            elig.feesPassed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                          }`}>
+                            {elig.feesPassed ? 'Cleared' : 'Dues Pending'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                            isEligible
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            {isEligible ? 'Eligible' : 'Barred (Criteria Unmet)'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          {c.hallTicketIssued ? (
+                            <span className="text-[11px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                              Seat: {c.hallTicket?.seatNumber || 'Issued'}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!isEligible || hallTicketIssuing}
+                              onClick={() => handleIssueHallTicket(c.email, `${c.firstName} ${c.lastName}`, c.program)}
+                              className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-xl transition"
+                            >
+                              Issue Hall Ticket
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: RESULTS SIGN-OFF & PUBLISHING (Phase 5) */}
+      {activeTab === 'results' && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 text-white p-6 sm:p-8 rounded-3xl border border-amber-800/60 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <span className="bg-amber-500/20 text-amber-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-amber-500/30 inline-block">
+                Principal &amp; Exam Board Approvals (Phase 5)
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black">Official Results Approval &amp; Publishing Gates</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Gate 1: HOD reviews and locks internal marks. Gate 2: Principal / Dean reviews consolidated GPA scores and signs off before Exam Cell can publish results live to student portals.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-amber-600/30 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0 shadow-lg">
+              <CheckCheck className="w-8 h-8" />
+            </div>
+          </div>
+
+          {/* Action Gates Bar */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Semester 1 (Fall 2025) Official Marksheets</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Approval status determines student portal visibility.</p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                disabled={signOffLoading}
+                onClick={handleSignOffResults}
+                className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-5 py-3 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
+              >
+                <CheckCheck className="w-4 h-4" />
+                <span>{signOffLoading ? 'Signing Off...' : 'Principal Sign-Off (Gate 2)'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={publishLoading}
+                onClick={handlePublishResults}
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-5 py-3 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
+              >
+                <Award className="w-4 h-4" />
+                <span>{publishLoading ? 'Publishing...' : 'Publish to Student Portals'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Marksheets Listing */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b pb-4">
+              <h3 className="font-black text-slate-900 text-base">Consolidated Student Grade Records ({resultsList.length})</h3>
+              <button
+                type="button"
+                onClick={loadResultsSummary}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {resultsList.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                <Award className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No Semester Results Compiled Yet</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Once professors submit internal marks and Exam Cell enters external scores, marksheets will appear here for Principal sign-off.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                      <th className="py-3 px-4">Student Email</th>
+                      <th className="py-3 px-4">Semester</th>
+                      <th className="py-3 px-4 text-center">SGPA</th>
+                      <th className="py-3 px-4 text-center">CGPA</th>
+                      <th className="py-3 px-4 text-center">Principal Sign-Off</th>
+                      <th className="py-3 px-4 text-center">Portal Published</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {resultsList.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-900">{r.studentEmail}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-600">{r.semester}</td>
+                        <td className="py-3 px-4 text-center font-black text-indigo-600">{r.sgpa}</td>
+                        <td className="py-3 px-4 text-center font-black text-emerald-600">{r.cgpa}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                            r.principalSignedOff
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {r.principalSignedOff ? 'Signed Off' : 'Pending'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                            r.published
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>
+                            {r.published ? 'Live on Portal' : 'Unpublished'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 8: AUDIT TRAIL & LOGS */}
+      {activeTab === 'audit' && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <span className="bg-indigo-500/20 text-indigo-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-indigo-500/30 inline-block">
+                Compliance &amp; Governance
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black">Immutable Results &amp; Examination Audit Trail</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Complete traceability across all academic evaluation gates: HOD internal locks, Principal approvals, portal publishing, and grade revaluation adjustments.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0 shadow-lg">
+              <Clock className="w-8 h-8" />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <h3 className="text-base sm:text-lg font-black text-slate-900">Audit History Events ({auditLogs.length})</h3>
+              <button
+                type="button"
+                onClick={loadAuditLogs}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Refresh Logs</span>
+              </button>
+            </div>
+
+            {auditLogs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-2">
+                <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No Audit Events Logged Yet</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Critical actions (such as HOD marks locking, Dean approvals, and revaluations) will be logged here with timestamps and user emails.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-indigo-600 uppercase text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                          {log.action}
+                        </span>
+                        <span className="text-slate-500 font-mono text-[11px]">
+                          By: <strong className="text-slate-900">{log.performedBy || log.reviewerEmail || 'System'}</strong>
+                        </span>
+                      </div>
+                      <p className="text-slate-700 font-medium">
+                        {log.details || `Revaluation adjustment for ${log.studentEmail} (${log.subjectCode}): ${log.oldMarks} -> ${log.newMarks}`}
+                      </p>
+                      {log.auditNotes && (
+                        <p className="text-slate-500 italic text-[11px]">Note: "{log.auditNotes}"</p>
+                      )}
+                    </div>
+                    <span className="text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                      {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : 'Just now'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

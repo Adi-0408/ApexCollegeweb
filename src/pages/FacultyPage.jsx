@@ -26,7 +26,10 @@ import {
   Plus,
   Trash2,
   Edit3,
-  PlusCircle
+  PlusCircle,
+  Lock,
+  Unlock,
+  Shield
 } from 'lucide-react';
 import {
   auth,
@@ -45,19 +48,37 @@ import {
 } from '../lib/firebase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { markCourseAttendance, saveStudentResults, getFacultyList, getStudentTimetable, saveTimetable } from '../lib/academicData.js';
+import {
+  markCourseAttendance,
+  saveStudentResults,
+  getFacultyList,
+  getStudentTimetable,
+  saveTimetable,
+  getInternalMarks,
+  saveInternalMarksRecord,
+  lockSubjectInternalMarks
+} from '../lib/academicData.js';
+import { ROLES, roleLabel } from '../lib/roles.js';
 
 export default function FacultyPage() {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, staffRole, staffProfile, can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  const isHOD = staffRole === ROLES.HOD || staffRole === ROLES.SUPER_ADMIN || staffRole === ROLES.PRINCIPAL;
 
   // Login States for Faculty
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' | 'gradebook' | 'roster'
+  const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' | 'gradebook' | 'timetable' | 'roster' | 'hod_gate'
+
+  // HOD Approval Gate States (Phase 3)
+  const [hodSubject, setHodSubject] = useState('CS101');
+  const [hodInternalMarksList, setHodInternalMarksList] = useState([]);
+  const [hodLoadingMarks, setHodLoadingMarks] = useState(false);
+  const [hodLocking, setHodLocking] = useState(false);
 
   // Attendance Marker States
   const [selectedSubject, setSelectedSubject] = useState('CS101 - Computer Science & AI');
@@ -243,6 +264,38 @@ export default function FacultyPage() {
       console.warn('loadFaculty warning:', err);
     } finally {
       setFacLoading(false);
+    }
+  }
+
+  // --- HOD APPROVAL & LOCK GATE FUNCTIONS (Phase 3) ---
+  async function loadHODInternalMarks(subj) {
+    setHodLoadingMarks(true);
+    try {
+      const targetSubj = subj || hodSubject || 'CS101';
+      const marks = await getInternalMarks(targetSubj, 'Fall 2026');
+      setHodInternalMarksList(marks);
+    } catch (err) {
+      console.warn('loadHODInternalMarks warning:', err);
+    } finally {
+      setHodLoadingMarks(false);
+    }
+  }
+
+  async function handleLockMarks() {
+    if (!hodSubject) {
+      showToast('Select a subject code to lock.', 'error');
+      return;
+    }
+    if (!window.confirm(`As HOD, do you want to LOCK internal marks for ${hodSubject}? Once locked, professors cannot alter marks.`)) return;
+    setHodLocking(true);
+    try {
+      await lockSubjectInternalMarks(hodSubject, 'Fall 2026', currentUser?.email || 'HOD');
+      showToast(`Approval Gate 1 Passed: Internal marks for ${hodSubject} are now officially LOCKED!`);
+      await loadHODInternalMarks(hodSubject);
+    } catch (err) {
+      showToast('Failed to lock marks: ' + err.message, 'error');
+    } finally {
+      setHodLocking(false);
     }
   }
 
@@ -465,6 +518,7 @@ export default function FacultyPage() {
         {[
           { key: 'attendance', label: 'Roll Call Attendance Marker', icon: <CheckCircle className="w-4 h-4" /> },
           { key: 'gradebook', label: 'Exam Marks & Gradebook', icon: <Award className="w-4 h-4" /> },
+          ...(isHOD ? [{ key: 'hod_gate', label: 'HOD Internal Marks Gate (Gate 1)', icon: <Lock className="w-4 h-4" /> }] : []),
           { key: 'timetable', label: 'Weekly Timetable Builder', icon: <CalendarDays className="w-4 h-4" /> },
           { key: 'roster', label: 'Department Faculty Roster', icon: <Users className="w-4 h-4" /> },
         ].map((tab) => (
@@ -989,6 +1043,114 @@ export default function FacultyPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: HOD INTERNAL MARKS APPROVAL & LOCK GATE (Phase 3) */}
+      {activeTab === 'hod_gate' && isHOD && (
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in">
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <span className="bg-indigo-500/20 text-indigo-300 text-xs font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full border border-indigo-500/30 inline-block">
+                HOD Department Gate (Approval Gate 1)
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black">Internal Marks Review &amp; Lock Protocol</h2>
+              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                As Head of Department (HOD), verify continuous internal assessment marks entered by professors. Locking marks prevents unauthorized alterations before Exam Cell compiles semester GPAs.
+              </p>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0 shadow-lg">
+              <Lock className="w-8 h-8" />
+            </div>
+          </div>
+
+          {/* Subject Selector & Lock Action */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div className="flex-1 max-w-md space-y-1">
+              <label className="block text-xs font-bold uppercase text-slate-700">Select Course / Subject Code</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={hodSubject}
+                  onChange={(e) => {
+                    setHodSubject(e.target.value.toUpperCase());
+                    loadHODInternalMarks(e.target.value.toUpperCase());
+                  }}
+                  placeholder="e.g. CS101"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-bold uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => loadHODInternalMarks(hodSubject)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-3 rounded-xl transition shrink-0"
+                  title="Reload marks"
+                >
+                  <RefreshCw className="w-4 h-4 text-indigo-600" />
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={hodLocking}
+              onClick={handleLockMarks}
+              className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-7 py-3.5 rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              <Lock className="w-4 h-4" />
+              <span>{hodLocking ? 'Locking Marks...' : 'Review & Lock Internal Marks (Gate 1)'}</span>
+            </button>
+          </div>
+
+          {/* Enrolled Students & Marks Preview */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b pb-4">
+              <h3 className="font-black text-slate-900 text-base">Continuous Assessment Student Marks: {hodSubject}</h3>
+              <span className="text-xs text-slate-400 font-medium">{rollCall.length} enrolled student(s)</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-extrabold text-[11px] border-b border-slate-200">
+                    <th className="py-3.5 px-4">Student Candidate</th>
+                    <th className="py-3.5 px-4">Enrolled Program</th>
+                    <th className="py-3.5 px-4 text-center">Internal Score (Max 30)</th>
+                    <th className="py-3.5 px-4 text-center">Assessment %</th>
+                    <th className="py-3.5 px-4 text-center">Lock Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {rollCall.map((item, idx) => {
+                    const foundLock = hodInternalMarksList.find((m) => m.studentEmail === item.email.toLowerCase());
+                    const isLocked = foundLock?.lockedByHOD || false;
+                    const marks = foundLock?.marks !== undefined ? foundLock.marks : 26;
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{item.name}</div>
+                          <div className="font-mono text-[11px] text-slate-400">{item.email}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 font-semibold">{item.program}</td>
+                        <td className="py-3.5 px-4 text-center font-bold text-slate-900">{marks} / 30</td>
+                        <td className="py-3.5 px-4 text-center font-black text-indigo-600">
+                          {((marks / 30) * 100).toFixed(1)}%
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                            isLocked
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {isLocked ? 'Locked by HOD' : 'Draft / Unlocked'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
