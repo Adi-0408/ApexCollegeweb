@@ -104,6 +104,8 @@ export const DEFAULT_PROGRAMS = [
     description: "Master software engineering, machine learning, cloud computing, and cybersecurity.",
     image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
     duration: "4 Years",
+    price: 14500,
+    priceDisplay: "$14,500 / year",
     active: true
   },
   {
@@ -114,6 +116,8 @@ export const DEFAULT_PROGRAMS = [
     description: "Develop strategic management, entrepreneurship, finance, and digital marketing capabilities.",
     image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80",
     duration: "3 Years",
+    price: 12000,
+    priceDisplay: "$12,000 / year",
     active: true
   },
   {
@@ -124,6 +128,8 @@ export const DEFAULT_PROGRAMS = [
     description: "Hands-on training in automated systems, smart manufacturing, and CAD modeling.",
     image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
     duration: "4 Years",
+    price: 15500,
+    priceDisplay: "$15,500 / year",
     active: true
   }
 ];

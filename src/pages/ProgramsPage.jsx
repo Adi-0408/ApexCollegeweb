@@ -104,6 +104,12 @@ export default function ProgramsPage() {
                       {p.duration && <span className="absolute top-4 right-4 text-[10px] font-bold text-slate-700 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full">{p.duration}</span>}
                     </div>
                     <div className="p-6 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                          {p.price ? `$${Number(p.price).toLocaleString()} / yr` : (p.priceDisplay || '$14,500 / yr')}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">Annual Tuition</span>
+                      </div>
                       <h3 className="text-xl font-black text-slate-900 group-hover:text-indigo-600 transition">{p.title}</h3>
                       <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">{p.description}</p>
                     </div>

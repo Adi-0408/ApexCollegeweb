@@ -818,7 +818,21 @@ export default function PortalPage() {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div>
                         <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Undergraduate Degree Program</span>
-                        <h3 className="text-xl font-black text-slate-900 mt-0.5">{currentAppData?.program || 'Academic Degree'}</h3>
+                        <div className="flex flex-wrap items-center gap-2.5 mt-0.5">
+                          <h3 className="text-xl font-black text-slate-900">{currentAppData?.program || 'Academic Degree'}</h3>
+                          {(() => {
+                            const pMatch = programs.find((p) =>
+                              currentAppData?.program?.toLowerCase().includes(p.title.toLowerCase()) ||
+                              p.title?.toLowerCase().includes(currentAppData?.program?.toLowerCase())
+                            );
+                            if (!pMatch) return null;
+                            return (
+                              <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                                ${Number(pMatch.price || 14500).toLocaleString()} / yr
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
                       <div>
                         {appStatus === 'accepted' && (
@@ -938,9 +952,10 @@ export default function PortalPage() {
                         <option value="">-- Choose Degree Program --</option>
                         {availablePrograms.map((p) => {
                           const fullTitle = p.fullTitle || `${p.degree ? p.degree + ' ' : ''}${p.title}`;
+                          const priceStr = p.price ? `$${Number(p.price).toLocaleString()} / yr` : (p.priceDisplay || '$14,500 / yr');
                           return (
                             <option key={p.id} value={fullTitle}>
-                              {fullTitle}
+                              {fullTitle} — {priceStr}
                             </option>
                           );
                         })}

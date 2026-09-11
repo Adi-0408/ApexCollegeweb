@@ -124,6 +124,7 @@ export default function AdminPage() {
   const [progDuration, setProgDuration] = useState('4 Years');
   const [progImage, setProgImage] = useState('');
   const [progDesc, setProgDesc] = useState('');
+  const [progPrice, setProgPrice] = useState(14500);
   const [progSaving, setProgSaving] = useState(false);
 
   // CMS
@@ -540,6 +541,7 @@ export default function AdminPage() {
     setProgDuration('4 Years');
     setProgImage('');
     setProgDesc('');
+    setProgPrice(14500);
     setShowProgramModal(true);
   }
 
@@ -550,6 +552,7 @@ export default function AdminPage() {
     setProgDuration(p.duration || '4 Years');
     setProgImage(p.image || '');
     setProgDesc(p.description || '');
+    setProgPrice(p.price || p.tuition || 14500);
     setShowProgramModal(true);
   }
 
@@ -557,6 +560,7 @@ export default function AdminPage() {
     e.preventDefault();
     setProgSaving(true);
     try {
+      const priceNum = Number(progPrice) || 14500;
       const data = {
         title: progTitle,
         degree: progDegree,
@@ -564,6 +568,8 @@ export default function AdminPage() {
         duration: progDuration,
         image: progImage,
         description: progDesc,
+        price: priceNum,
+        priceDisplay: `$${priceNum.toLocaleString()} / year`,
         active: true,
       };
       await saveProgram(data, editProgId || null);
@@ -1584,7 +1590,12 @@ export default function AdminPage() {
                     )}
                   </div>
                   <div>
-                    <h4 className="font-black text-slate-900 text-base">{p.title}</h4>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <h4 className="font-black text-slate-900 text-base">{p.title}</h4>
+                      <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 shrink-0">
+                        ${Number(p.price || 14500).toLocaleString()} / yr
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">{p.description}</p>
                   </div>
                 </div>
@@ -1641,7 +1652,7 @@ export default function AdminPage() {
                       className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Degree Badge *</label>
                       <input
@@ -1661,6 +1672,19 @@ export default function AdminPage() {
                         value={progDuration}
                         onChange={(e) => setProgDuration(e.target.value)}
                         placeholder="e.g. 4 Years"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Tuition / Yr ($) *</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={100}
+                        value={progPrice}
+                        onChange={(e) => setProgPrice(e.target.value)}
+                        placeholder="e.g. 14500"
                         className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       />
                     </div>
@@ -2199,17 +2223,50 @@ export default function AdminPage() {
                     required
                     list="student-emails-list"
                     value={feeStudentEmail}
-                    onChange={(e) => setFeeStudentEmail(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFeeStudentEmail(val);
+                      const matchedApp = applications.find(
+                        (a) => a.email && a.email.toLowerCase() === val.trim().toLowerCase()
+                      );
+                      if (matchedApp && matchedApp.program) {
+                        const matchedProg = programs.find(
+                          (p) =>
+                            matchedApp.program.toLowerCase().includes(p.title.toLowerCase()) ||
+                            p.title.toLowerCase().includes(matchedApp.program.toLowerCase()) ||
+                            (p.fullTitle && p.fullTitle.toLowerCase() === matchedApp.program.toLowerCase())
+                        );
+                        if (matchedProg && matchedProg.price) {
+                          setFeeTuition(matchedProg.price);
+                        }
+                      }
+                    }}
                     placeholder="student@apex.edu"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-teal-500 focus:outline-none"
                   />
                   <datalist id="student-emails-list">
                     {applications.map((a) => (
                       <option key={a.id} value={a.email}>
-                        {a.firstName} {a.lastName} ({a.email})
+                        {a.firstName} {a.lastName} ({a.email}) - {a.program || 'Undergraduate'}
                       </option>
                     ))}
                   </datalist>
+                  {(() => {
+                    const matchedApp = applications.find(
+                      (a) => a.email && a.email.toLowerCase() === feeStudentEmail.trim().toLowerCase()
+                    );
+                    if (!matchedApp) return null;
+                    const matchedProg = programs.find(
+                      (p) =>
+                        matchedApp.program?.toLowerCase().includes(p.title.toLowerCase()) ||
+                        p.title?.toLowerCase().includes(matchedApp.program?.toLowerCase())
+                    );
+                    return (
+                      <p className="text-[11px] text-teal-700 font-bold mt-1 bg-teal-50 p-1.5 rounded-lg border border-teal-200 inline-block">
+                        Major: {matchedApp.program} {matchedProg?.price ? `• Set Tuition: $${Number(matchedProg.price).toLocaleString()} / yr` : ''}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Total Semester Tuition ($) *</label>
