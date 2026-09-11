@@ -61,6 +61,44 @@ export async function createAssistantUser(email, password, name, role, createdBy
   return cred;
 }
 
+export async function createFacultyUser(email, password, name, department, role, assignedSubjects, createdByEmail) {
+  const cleanEmail = email.trim().toLowerCase();
+  
+  // 1. Create in Firebase Auth using secondary auth instance
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
+  
+  // 2. Save metadata in 'faculty_members' collection
+  const subjectsArray = Array.isArray(assignedSubjects) 
+    ? assignedSubjects 
+    : typeof assignedSubjects === 'string' 
+    ? assignedSubjects.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
+
+  await setDoc(doc(db, 'faculty_members', cleanEmail), {
+    email: cleanEmail,
+    name: name?.trim() || 'Faculty Member',
+    department: department?.trim() || 'Academic Department',
+    role: role?.trim() || 'Professor',
+    assignedSubjects: subjectsArray,
+    initialPassword: password,
+    createdBy: createdByEmail || 'Admin',
+    createdAt: serverTimestamp(),
+  });
+
+  // 3. Grant staff access in 'admin_users'
+  await setDoc(doc(db, 'admin_users', cleanEmail), {
+    email: cleanEmail,
+    name: name?.trim() || 'Faculty Member',
+    role: `Faculty (${role?.trim() || 'Professor'})`,
+    initialPassword: password,
+    active: true,
+    createdBy: createdByEmail || 'Admin',
+    createdAt: serverTimestamp(),
+  });
+
+  return cred;
+}
+
 export {
   app,
   auth,

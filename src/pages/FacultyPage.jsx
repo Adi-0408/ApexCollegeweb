@@ -34,6 +34,7 @@ import {
   query,
   where,
   setDoc,
+  getDoc,
   doc,
   serverTimestamp
 } from '../lib/firebase.js';
@@ -71,12 +72,41 @@ export default function FacultyPage() {
   const [facultyList, setFacultyList] = useState([]);
   const [facLoading, setFacLoading] = useState(false);
 
+  // Faculty Profile & Assigned Multiple Course Codes
+  const [facultyProfile, setFacultyProfile] = useState(null);
+  const [facultySubjects, setFacultySubjects] = useState([]);
+
   useEffect(() => {
     if (currentUser) {
       loadEnrolledStudents();
       loadFaculty();
+      loadFacultyProfile();
     }
   }, [currentUser]);
+
+  async function loadFacultyProfile() {
+    if (!currentUser?.email) return;
+    try {
+      const docRef = doc(db, 'faculty_members', currentUser.email.toLowerCase());
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        setFacultyProfile(data);
+        let subjects = [];
+        if (Array.isArray(data.assignedSubjects) && data.assignedSubjects.length > 0) {
+          subjects = data.assignedSubjects;
+        } else if (typeof data.assignedSubject === 'string' && data.assignedSubject.trim()) {
+          subjects = data.assignedSubject.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        if (subjects.length > 0) {
+          setFacultySubjects(subjects);
+          setSelectedSubject(subjects[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('loadFacultyProfile warning:', err);
+    }
+  }
 
   async function loadEnrolledStudents() {
     setRosterLoading(true);
@@ -301,12 +331,24 @@ export default function FacultyPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-white">Faculty &amp; Academic Staff Console</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-white">
+                {facultyProfile?.name ? `${facultyProfile.name}` : 'Faculty & Academic Staff Console'}
+              </h1>
               <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-400/30">
-                Staff Verified
+                {facultyProfile?.role || 'Staff Verified'}
               </span>
             </div>
             <p className="text-xs text-indigo-200/80 font-mono mt-0.5">{currentUser.email}</p>
+            {facultySubjects.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <span className="text-[10px] text-slate-400 font-bold self-center mr-1">Assigned Courses:</span>
+                {facultySubjects.map((sub, idx) => (
+                  <span key={idx} className="bg-indigo-500/25 text-indigo-200 text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border border-indigo-400/30">
+                    {sub}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 relative z-10">
@@ -389,10 +431,20 @@ export default function FacultyPage() {
                   onChange={(e) => setSelectedSubject(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 >
-                  <option value="CS101 - Data Structures & Algorithms">CS101 - Data Structures &amp; Algorithms</option>
-                  <option value="CS102 - Artificial Intelligence & ML">CS102 - Artificial Intelligence &amp; ML</option>
-                  <option value="CS103 - Database Management Systems">CS103 - Database Management Systems</option>
-                  <option value="MATH201 - Discrete Mathematics">MATH201 - Discrete Mathematics</option>
+                  {facultySubjects.length > 0 ? (
+                    facultySubjects.map((sub, idx) => (
+                      <option key={idx} value={sub}>
+                        {sub}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="CS101 - Data Structures & Algorithms">CS101 - Data Structures &amp; Algorithms</option>
+                      <option value="CS102 - Artificial Intelligence & ML">CS102 - Artificial Intelligence &amp; ML</option>
+                      <option value="CS103 - Database Management Systems">CS103 - Database Management Systems</option>
+                      <option value="MATH201 - Discrete Mathematics">MATH201 - Discrete Mathematics</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>
@@ -604,9 +656,17 @@ export default function FacultyPage() {
                   </div>
                   <h3 className="font-black text-slate-900 text-lg">{fac.name}</h3>
                   <p className="text-xs text-slate-500 font-mono">{fac.email}</p>
-                  <div className="pt-2 border-t border-slate-100 text-xs text-slate-700 font-semibold flex items-center gap-1.5">
+                  <div className="pt-2 border-t border-slate-100 text-xs text-slate-700 font-semibold flex items-center gap-1.5 flex-wrap">
                     <BookOpen className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>{fac.assignedSubject}</span>
+                    {Array.isArray(fac.assignedSubjects) && fac.assignedSubjects.length > 0 ? (
+                      fac.assignedSubjects.map((s, idx) => (
+                        <span key={idx} className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded text-[11px] border border-indigo-100">
+                          {s}
+                        </span>
+                      ))
+                    ) : (
+                      <span>{fac.assignedSubject || 'General Faculty'}</span>
+                    )}
                   </div>
                 </div>
               ))}

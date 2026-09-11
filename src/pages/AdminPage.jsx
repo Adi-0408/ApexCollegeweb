@@ -58,7 +58,8 @@ import {
   doc,
   query,
   orderBy,
-  createAssistantUser
+  createAssistantUser,
+  createFacultyUser
 } from '../lib/firebase.js';
 import {
   getSiteContent,
@@ -123,10 +124,16 @@ export default function AdminPage() {
   const [facultyList, setFacultyList] = useState([]);
   const [facName, setFacName] = useState('');
   const [facEmail, setFacEmail] = useState('');
+  const [facPass, setFacPass] = useState('');
   const [facDept, setFacDept] = useState('Computer Science & AI');
   const [facRole, setFacRole] = useState('Professor');
   const [facSubject, setFacSubject] = useState('');
   const [facSaving, setFacSaving] = useState(false);
+  const [showFacPassMap, setShowFacPassMap] = useState({});
+
+  function toggleFacPassVisibility(facId) {
+    setShowFacPassMap((prev) => ({ ...prev, [facId]: !prev[facId] }));
+  }
 
   async function loadFaculty() {
     const list = await getFacultyList();
@@ -135,26 +142,33 @@ export default function AdminPage() {
 
   async function handleAddFaculty(e) {
     e.preventDefault();
-    if (!facName || !facEmail) {
-      showToast('Please fill out Name and Email.', 'error');
+    if (!facName || !facEmail || !facPass) {
+      showToast('Please fill out Name, Email, and Password.', 'error');
+      return;
+    }
+    if (facPass.length < 6) {
+      showToast('Password must be at least 6 characters long.', 'error');
       return;
     }
     setFacSaving(true);
     try {
-      await saveFacultyMember({
-        name: facName.trim(),
-        email: facEmail.trim().toLowerCase(),
-        department: facDept.trim(),
-        role: facRole.trim(),
-        assignedSubject: facSubject.trim() || 'General Course',
-      });
-      showToast(`Faculty member ${facName} registered successfully!`);
+      await createFacultyUser(
+        facEmail.trim(),
+        facPass,
+        facName.trim(),
+        facDept.trim(),
+        facRole.trim(),
+        facSubject,
+        currentUser?.email || 'Admin'
+      );
+      showToast(`Faculty member ${facName} registered successfully! Credentials saved.`);
       setFacName('');
       setFacEmail('');
+      setFacPass('');
       setFacSubject('');
       loadFaculty();
     } catch (err) {
-      showToast('Failed to add faculty: ' + err.message, 'error');
+      showToast('Failed to create faculty account: ' + err.message, 'error');
     } finally {
       setFacSaving(false);
     }
@@ -1842,7 +1856,7 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={handleAddFaculty} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Name *</label>
                   <input
@@ -1855,13 +1869,25 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Staff Email *</label>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Faculty Email *</label>
                   <input
                     type="email"
                     required
                     value={facEmail}
                     onChange={(e) => setFacEmail(e.target.value)}
                     placeholder="e.g. robert.miller@apex.edu"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assign Password *</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={6}
+                    value={facPass}
+                    onChange={(e) => setFacPass(e.target.value)}
+                    placeholder="e.g. prof123456"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -1890,12 +1916,12 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assigned Subject / Course Code</label>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">Assigned Course Code(s) (Separate Multiple with Comma)</label>
                   <input
                     type="text"
                     value={facSubject}
                     onChange={(e) => setFacSubject(e.target.value)}
-                    placeholder="e.g. CS101 - Data Structures"
+                    placeholder="e.g. CS101, CS102 - AI & ML, MATH201"
                     className="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -1907,40 +1933,78 @@ export default function AdminPage() {
                 className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-60"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>{facSaving ? 'Registering...' : 'Register Faculty Record'}</span>
+                <span>{facSaving ? 'Creating Faculty Account...' : 'Create & Provision Faculty Account'}</span>
               </button>
             </form>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {facultyList.map((fac) => (
-              <div key={fac.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between hover:shadow-lg transition">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-                      {fac.department}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-400">{fac.role}</span>
-                  </div>
-                  <h4 className="font-black text-slate-900 text-lg">{fac.name}</h4>
-                  <p className="text-xs text-slate-500 font-mono">{fac.email}</p>
-                  <p className="text-xs text-slate-700 font-semibold pt-1">
-                    Subject: <strong className="text-indigo-600">{fac.assignedSubject}</strong>
-                  </p>
-                </div>
+            {facultyList.map((fac) => {
+              const subjectsList = Array.isArray(fac.assignedSubjects)
+                ? fac.assignedSubjects
+                : typeof fac.assignedSubject === 'string'
+                ? fac.assignedSubject.split(',').map((s) => s.trim()).filter(Boolean)
+                : ['General Course'];
 
-                <div className="pt-3 border-t border-slate-100 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFaculty(fac.id)}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl border border-rose-200 transition flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Remove</span>
-                  </button>
+              return (
+                <div key={fac.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between hover:shadow-lg transition">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+                        {fac.department || 'Academic Dept'}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-400">{fac.role || 'Professor'}</span>
+                    </div>
+
+                    <div>
+                      <h4 className="font-black text-slate-900 text-lg">{fac.name}</h4>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">{fac.email}</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 text-[11px]">Assigned Password:</span>
+                        <div className="flex items-center gap-1.5">
+                          <strong className="text-slate-900 font-mono text-xs">
+                            {showFacPassMap[fac.id] ? fac.initialPassword || '******' : '••••••••'}
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => toggleFacPassVisibility(fac.id)}
+                            className="text-slate-400 hover:text-slate-700 p-0.5"
+                            title="Toggle password view"
+                          >
+                            {showFacPassMap[fac.id] ? <Lock className="w-3 h-3 text-indigo-600" /> : <Unlock className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1.5">Assigned Courses &amp; Subjects ({subjectsList.length})</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {subjectsList.map((subj, sIdx) => (
+                          <span key={sIdx} className="bg-indigo-50 text-indigo-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-indigo-100">
+                            📚 {subj}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFaculty(fac.id)}
+                      className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3.5 py-2 rounded-xl border border-rose-200 transition flex items-center gap-1.5 active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove Faculty</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
