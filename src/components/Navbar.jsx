@@ -61,16 +61,16 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-20">
 
             {/* Brand Logo */}
-            <Link to="/" className="flex items-center gap-3 shrink-0">
-              <div className="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200">
-                <GraduationCap className="w-6 h-6" />
+            <Link to="/" className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-11 sm:h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200 shrink-0">
+                <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <div className="flex items-center text-lg sm:text-xl font-black tracking-tight leading-none">
+              <div className="min-w-0">
+                <div className="flex items-center text-base sm:text-xl font-black tracking-tight leading-none whitespace-nowrap">
                   <span className="text-slate-900">{brandName}</span>
                   <span className="text-indigo-600 ml-1">{brandSuffix}</span>
                 </div>
-                <p className="text-[9px] sm:text-[10px] tracking-widest text-slate-400 font-bold uppercase mt-1">
+                <p className="hidden sm:block text-[9px] sm:text-[10px] tracking-widest text-slate-400 font-bold uppercase mt-1">
                   {brandTagline}
                 </p>
               </div>
@@ -136,23 +136,23 @@ export default function Navbar() {
             </div>
 
             {/* Mobile Right Controls: Exactly 2 sections: 1. Apply, 2. Dropdown List */}
-            <div className="flex lg:hidden items-center gap-2 shrink-0">
+            <div className="flex lg:hidden items-center gap-1.5 sm:gap-2 shrink-0">
               {/* 1. APPLY BUTTON (or Portal if logged in) */}
               {!isAccepted && !isAdmin && !isFaculty ? (
                 <button
                   type="button"
                   onClick={(e) => handleApplyClick(e)}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-3.5 py-2 rounded-xl shadow-md text-xs transition flex items-center gap-1.5"
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-md text-[11px] sm:text-xs transition flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>Apply Now</span>
                 </button>
               ) : (
                 <Link
                   to={isAdmin ? '/admin' : isFaculty ? '/faculty' : '/portal'}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-3.5 py-2 rounded-xl shadow-md text-xs transition flex items-center gap-1.5"
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-md text-[11px] sm:text-xs transition flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
                 >
-                  <User className="w-3.5 h-3.5" />
+                  <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>{isAdmin ? 'Admin' : isFaculty ? 'Faculty' : 'Portal'}</span>
                 </Link>
               )}
@@ -162,11 +162,11 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => setMobileOpen((prev) => !prev)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition focus:outline-none"
+                  className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition focus:outline-none whitespace-nowrap"
                   aria-label="Toggle Pages Dropdown Menu"
                 >
                   <span>Menu</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${mobileOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform duration-200 ${mobileOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu List */}

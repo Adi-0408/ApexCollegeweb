@@ -5,16 +5,52 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply font-sans bg-slate-50 text-slate-900 antialiased min-h-screen flex flex-col;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  *, ::before, ::after {
+    box-sizing: border-box;
+  }
+
+  img, svg, video, canvas, audio, iframe, embed, object {
+    max-width: 100%;
+    height: auto;
   }
 }
 
-/* Custom transitions and scrollbar */
-html {
-  scroll-behavior: smooth;
+/* Explicit mobile and tablet responsive media queries */
+@media screen and (max-width: 768px) {
+  html, body {
+    font-size: 16px;
+  }
+
+  /* Prevent awkward horizontal blowout from long words or titles */
+  h1, h2, h3, h4, h5, h6, p, span, a, button {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
 }
 
+@media screen and (max-width: 640px) {
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
