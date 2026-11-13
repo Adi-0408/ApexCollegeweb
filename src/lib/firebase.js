@@ -38,9 +38,15 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Secondary app instance for creating assistant user accounts without disturbing active admin session
-const secondaryApp = getApps().find(a => a.name === 'SecondaryAdminApp') || initializeApp(firebaseConfig, 'SecondaryAdminApp');
-const secondaryAuth = getAuth(secondaryApp);
+// Lazy secondary app instance for creating assistant user accounts without disturbing active admin session
+let _secondaryAuth = null;
+function getSecondaryAuth() {
+  if (!_secondaryAuth) {
+    const secondaryApp = getApps().find(a => a.name === 'SecondaryAdminApp') || initializeApp(firebaseConfig, 'SecondaryAdminApp');
+    _secondaryAuth = getAuth(secondaryApp);
+  }
+  return _secondaryAuth;
+}
 
 export async function createAssistantUser(email, password, name, role, createdByEmail) {
   return createStaffUser({
@@ -65,7 +71,8 @@ export async function createStaffUser({
   const systemRole = normalizeSystemRole(role, {
     hasFacultyRecord: [ROLES.FACULTY, ROLES.HOD].includes(normalizeSystemRole(role)),
   });
-  const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
+  const secAuth = getSecondaryAuth();
+  const cred = await createUserWithEmailAndPassword(secAuth, cleanEmail, password);
 
   const subjectsArray = Array.isArray(assignedSubjects)
     ? assignedSubjects

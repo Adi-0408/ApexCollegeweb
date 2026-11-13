@@ -4,6 +4,7 @@ import { Search, ArrowRight, CheckCircle, ShieldCheck } from 'lucide-react';
 import { useSiteData } from '../context/SiteDataContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import LoginModal from '../components/LoginModal.jsx';
+import OptimizedImage from '../components/OptimizedImage.jsx';
 
 export default function ProgramsPage() {
   const { programs } = useSiteData();
@@ -99,7 +100,16 @@ export default function ProgramsPage() {
                 <div key={p.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
                   <div>
                     <div className="h-52 sm:h-60 w-full overflow-hidden bg-slate-100 relative">
-                      <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                      <OptimizedImage
+                        src={p.image}
+                        alt={p.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        widths={[360, 600, 800]}
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        priority={false}
+                        width="600"
+                        height="400"
+                      />
                       <span className="absolute top-4 left-4 text-[10px] font-extrabold text-indigo-700 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full uppercase shadow-sm">{p.degree || 'Degree'}</span>
                       {p.duration && <span className="absolute top-4 right-4 text-[10px] font-bold text-slate-700 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full">{p.duration}</span>}
                     </div>

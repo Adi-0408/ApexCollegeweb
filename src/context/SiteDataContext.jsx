@@ -1,48 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
-  getSiteContent,
-  getProgramsList,
   subscribeSiteContent,
   subscribePrograms,
-  DEFAULT_SITE_CONTENT,
-  DEFAULT_PROGRAMS
+  getCachedSiteContent,
+  getCachedPrograms
 } from '../lib/siteData.js';
 
 const SiteDataContext = createContext(null);
 
 export function SiteDataProvider({ children }) {
-  const [siteContent, setSiteContent] = useState(DEFAULT_SITE_CONTENT);
-  const [programs, setPrograms] = useState(DEFAULT_PROGRAMS);
-  const [loading, setLoading] = useState(true);
+  const [siteContent, setSiteContent] = useState(() => getCachedSiteContent());
+  const [programs, setPrograms] = useState(() => getCachedPrograms());
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let unsubContent;
-    let unsubProgs;
+    // Single real-time listeners that automatically push initial and updated state
+    const unsubContent = subscribeSiteContent((newContent) => {
+      if (newContent) setSiteContent(newContent);
+    });
 
-    async function initializeData() {
-      try {
-        const [content, progsList] = await Promise.all([
-          getSiteContent(),
-          getProgramsList()
-        ]);
-        if (content) setSiteContent(content);
-        if (progsList) setPrograms(progsList);
-      } catch (err) {
-        console.error("Error loading initial site data:", err);
-      } finally {
-        setLoading(false);
-      }
-
-      unsubContent = subscribeSiteContent((newContent) => {
-        if (newContent) setSiteContent(newContent);
-      });
-
-      unsubProgs = subscribePrograms((newProgs) => {
-        if (newProgs) setPrograms(newProgs);
-      });
-    }
-
-    initializeData();
+    const unsubProgs = subscribePrograms((newProgs) => {
+      if (newProgs) setPrograms(newProgs);
+    });
 
     return () => {
       if (unsubContent) unsubContent();

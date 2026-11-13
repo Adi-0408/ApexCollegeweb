@@ -1,15 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
 import HomePage from './pages/HomePage.jsx';
-import ProgramsPage from './pages/ProgramsPage.jsx';
-import CampusPage from './pages/CampusPage.jsx';
-import ContactPage from './pages/ContactPage.jsx';
-import PortalPage from './pages/PortalPage.jsx';
-import AdminPage from './pages/AdminPage.jsx';
-import FacultyPage from './pages/FacultyPage.jsx';
 import { useAuth } from './context/AuthContext.jsx';
+
+// Code-split secondary routes so initial homepage load is tiny and fast
+const ProgramsPage = lazy(() => import('./pages/ProgramsPage.jsx'));
+const CampusPage = lazy(() => import('./pages/CampusPage.jsx'));
+const ContactPage = lazy(() => import('./pages/ContactPage.jsx'));
+const PortalPage = lazy(() => import('./pages/PortalPage.jsx'));
+const AdminPage = lazy(() => import('./pages/AdminPage.jsx'));
+const FacultyPage = lazy(() => import('./pages/FacultyPage.jsx'));
+
+function PageLoader() {
+  return (
+    <div className="flex-grow flex items-center justify-center py-24 text-slate-400 font-semibold text-sm">
+      <div className="flex items-center gap-3">
+        <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-ping" />
+        <span>Loading page...</span>
+      </div>
+    </div>
+  );
+}
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -90,30 +103,32 @@ export default function App() {
       <ScrollToTop />
       <Navbar />
       <div className="flex-grow flex flex-col">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/programs" element={<ProgramsPage />} />
-          <Route path="/campus" element={<CampusPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/portal" element={<PortalPage />} />
-          <Route
-            path="/faculty"
-            element={
-              <ProtectedFacultyRoute>
-                <FacultyPage />
-              </ProtectedFacultyRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedAdminRoute>
-                <AdminPage />
-              </ProtectedAdminRoute>
-            }
-          />
-          <Route path="*" element={<HomePage />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/programs" element={<ProgramsPage />} />
+            <Route path="/campus" element={<CampusPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/portal" element={<PortalPage />} />
+            <Route
+              path="/faculty"
+              element={
+                <ProtectedFacultyRoute>
+                  <FacultyPage />
+                </ProtectedFacultyRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedAdminRoute>
+                  <AdminPage />
+                </ProtectedAdminRoute>
+              }
+            />
+            <Route path="*" element={<HomePage />} />
+          </Routes>
+        </Suspense>
       </div>
       <Footer />
     </div>

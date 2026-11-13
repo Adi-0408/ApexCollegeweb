@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowDown, PlayCircle, X, Play, Home, Utensils, ShieldCheck } from 'lucide-react';
 import { useSiteData } from '../context/SiteDataContext.jsx';
+import OptimizedImage from '../components/OptimizedImage.jsx';
 
 export default function CampusPage() {
   const { siteContent } = useSiteData();
@@ -49,10 +50,13 @@ export default function CampusPage() {
     <main className="flex-grow w-full space-y-16 sm:space-y-24 pb-20">
       {/* HERO */}
       <section className="relative bg-slate-900 text-white py-20 sm:py-28 lg:py-36 w-full overflow-hidden">
-        <img
-          src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1920&q=80"
+        <OptimizedImage
+          src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1200&q=70"
           alt="Campus Aerial"
           className="absolute inset-0 w-full h-full object-cover opacity-25 scale-105"
+          widths={[640, 1024, 1600]}
+          sizes="100vw"
+          priority={true}
         />
         <div className="absolute inset-0 bg-gradient-to-b sm:bg-gradient-to-r from-slate-950/90 via-slate-900/75 to-slate-950/85 sm:to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -129,7 +133,16 @@ export default function CampusPage() {
             <div key={fac.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
               <div>
                 <div className="h-52 sm:h-64 w-full overflow-hidden bg-slate-100 relative">
-                  <img src={fac.image} alt={fac.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                  <OptimizedImage
+                    src={fac.image}
+                    alt={fac.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    widths={[360, 600, 800]}
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    priority={false}
+                    width="600"
+                    height="400"
+                  />
                   <span className="absolute top-4 left-4 text-[10px] font-extrabold text-indigo-700 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full uppercase shadow-sm">{fac.category || 'Facility'}</span>
                   <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <button

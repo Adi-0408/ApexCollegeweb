@@ -4,6 +4,7 @@ import { Sparkles, ArrowRight, Play, CheckCircle, ShieldCheck } from 'lucide-rea
 import { useSiteData } from '../context/SiteDataContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import LoginModal from '../components/LoginModal.jsx';
+import OptimizedImage from '../components/OptimizedImage.jsx';
 
 export default function HomePage() {
   const { siteContent, programs } = useSiteData();
@@ -40,10 +41,13 @@ export default function HomePage() {
       <main className="flex-grow w-full space-y-16 sm:space-y-24 pb-20">
         {/* HERO SECTION */}
         <section className="relative bg-slate-900 text-white py-20 sm:py-28 lg:py-36 w-full overflow-hidden">
-          <img
-            src={c.heroImage || 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1920&q=80'}
+          <OptimizedImage
+            src={c.heroImage || 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1200&q=70'}
             alt="University Campus"
             className="absolute inset-0 w-full h-full object-cover opacity-30 scale-105"
+            widths={[640, 1024, 1600]}
+            sizes="100vw"
+            priority={true}
           />
           <div className="absolute inset-0 bg-gradient-to-b sm:bg-gradient-to-r from-slate-950/90 via-slate-900/70 to-slate-950/80 sm:to-transparent" />
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -131,7 +135,16 @@ export default function HomePage() {
                 <div key={p.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
                   <div>
                     <div className="h-48 sm:h-56 w-full overflow-hidden bg-slate-100 relative">
-                      <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                      <OptimizedImage
+                        src={p.image}
+                        alt={p.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        widths={[360, 600, 800]}
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        priority={false}
+                        width="600"
+                        height="380"
+                      />
                       <span className="absolute top-4 left-4 text-[10px] font-extrabold text-indigo-700 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full uppercase shadow-sm">{p.degree || 'Degree'}</span>
                       {p.duration && <span className="absolute top-4 right-4 text-[10px] font-bold text-slate-700 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full">{p.duration}</span>}
                     </div>
@@ -192,7 +205,16 @@ export default function HomePage() {
               {previewFacilities.map(fac => (
                 <div key={fac.id} className="bg-slate-800/80 rounded-3xl border border-slate-700/60 overflow-hidden shadow-lg hover:shadow-2xl transition flex flex-col group">
                   <div className="relative h-56 sm:h-64 bg-slate-900 overflow-hidden">
-                    <img src={fac.image} alt={fac.title} className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition duration-500" />
+                    <OptimizedImage
+                      src={fac.image}
+                      alt={fac.title}
+                      className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition duration-500"
+                      widths={[360, 600, 800]}
+                      sizes="(max-width: 640px) 100vw, 50vw"
+                      priority={false}
+                      width="600"
+                      height="400"
+                    />
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <a href={fac.videoUrl || 'https://www.youtube.com'} target="_blank" rel="noopener noreferrer"
                         className="w-14 h-14 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition" aria-label="Watch tour">
