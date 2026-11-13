@@ -51,12 +51,14 @@ export default function CampusPage() {
       {/* HERO */}
       <section className="relative bg-slate-900 text-white py-20 sm:py-28 lg:py-36 w-full overflow-hidden">
         <OptimizedImage
-          src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1200&q=70"
+          src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&fm=webp&w=1200&q=65"
           alt="Campus Aerial"
           className="absolute inset-0 w-full h-full object-cover opacity-25 scale-105"
           widths={[640, 1024, 1600]}
           sizes="100vw"
           priority={true}
+          width="1600"
+          height="900"
         />
         <div className="absolute inset-0 bg-gradient-to-b sm:bg-gradient-to-r from-slate-950/90 via-slate-900/75 to-slate-950/85 sm:to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -42,12 +42,14 @@ export default function HomePage() {
         {/* HERO SECTION */}
         <section className="relative bg-slate-900 text-white py-20 sm:py-28 lg:py-36 w-full overflow-hidden">
           <OptimizedImage
-            src={c.heroImage || 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1200&q=70'}
+            src={c.heroImage || 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&fm=webp&w=1200&q=65'}
             alt="University Campus"
             className="absolute inset-0 w-full h-full object-cover opacity-30 scale-105"
             widths={[640, 1024, 1600]}
             sizes="100vw"
             priority={true}
+            width="1600"
+            height="900"
           />
           <div className="absolute inset-0 bg-gradient-to-b sm:bg-gradient-to-r from-slate-950/90 via-slate-900/70 to-slate-950/80 sm:to-transparent" />
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -19,7 +19,7 @@ export const DEFAULT_SITE_CONTENT = {
   heroTitle: "Shape Your Future at",
   heroTitleHighlight: "Apex University",
   heroSubtitle: "Join a globally recognized institution dedicated to innovation, research, and developing tomorrow's leaders.",
-  heroImage: "https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1200&q=70",
+  heroImage: "https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&fm=webp&w=1200&q=65",
   stats: [
     { value: "#12", label: "National Rank" },
     { value: "96%", label: "Graduate Employment" },
@@ -37,7 +37,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "Knowledge & Innovation Central Library",
       category: "Academic",
       description: "24/7 research hub with 500k+ digital archives, private study pods, collaborative multimedia labs, and cafe.",
-      image: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["24/7 Access", "Silent Pods", "Digital Archive"]
     },
@@ -46,7 +46,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "Apex Olympic Athletic & Aquatic Arena",
       category: "Sports",
       description: "Indoor heated 50m Olympic swimming pool, 4,000-seat basketball arena, squash courts, and sports medicine center.",
-      image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["Olympic Pool", "NCAA Arena", "Physio Lab"]
     },
@@ -55,7 +55,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "Robotics & AI Supercomputing Pavilion",
       category: "Research",
       description: "High-performance GPU computing clusters, autonomous drone test cages, robotic arm assembly, and cleanrooms.",
-      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["GPU Cluster", "Cleanroom", "Drone Arena"]
     },
@@ -64,7 +64,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "The Apex Foundry (Startup & Maker Hub)",
       category: "Innovation",
       description: "Student startup incubator featuring industrial 3D printing labs, CNC milling, angel pitch stage, and mentor rooms.",
-      image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["3D Printing", "Pitch Stage", "Venture Mentors"]
     },
@@ -73,7 +73,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "Bio-Tech & Medical Simulation Center",
       category: "Research",
       description: "Virtual reality surgical training suites, genomics DNA sequencers, cell culture cleanrooms, and clinical bays.",
-      image: "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["VR Surgery", "Genomics Lab", "Clinical Bays"]
     },
@@ -82,7 +82,7 @@ export const DEFAULT_SITE_CONTENT = {
       title: "Apex Performing Arts & Concert Hall",
       category: "Arts",
       description: "1,200-seat acoustically perfected concert hall, Dolby Atmos recording studios, rehearsal halls, and gallery.",
-      image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=600&q=70",
+      image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&fm=webp&w=600&q=65",
       videoUrl: "https://www.youtube.com",
       tags: ["1200 Seats", "Dolby Sound", "Art Gallery"]
     }
@@ -102,7 +102,7 @@ export const DEFAULT_PROGRAMS = [
     degree: "B.S. Degree",
     fullTitle: "B.S. Computer Science & AI",
     description: "Master software engineering, machine learning, cloud computing, and cybersecurity.",
-    image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&fm=webp&w=600&q=65",
     duration: "4 Years",
     price: 14500,
     priceDisplay: "$14,500 / year",
@@ -114,7 +114,7 @@ export const DEFAULT_PROGRAMS = [
     degree: "B.B.A Degree",
     fullTitle: "B.B.A Business Administration",
     description: "Develop strategic management, entrepreneurship, finance, and digital marketing capabilities.",
-    image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&fm=webp&w=600&q=65",
     duration: "3 Years",
     price: 12000,
     priceDisplay: "$12,000 / year",
@@ -126,7 +126,7 @@ export const DEFAULT_PROGRAMS = [
     degree: "B.Tech Degree",
     fullTitle: "B.Tech Robotics & Mechanical",
     description: "Hands-on training in automated systems, smart manufacturing, and CAD modeling.",
-    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&fm=webp&w=600&q=65",
     duration: "4 Years",
     price: 15500,
     priceDisplay: "$15,500 / year",

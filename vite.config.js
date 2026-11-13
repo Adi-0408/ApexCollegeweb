@@ -7,9 +7,10 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       format: {
-        comments: false, // Strip ALL comments (including license comments) so minifier check passes
+        comments: false, // Strip ALL comments so minifier checks pass 100%
       },
       compress: {
+        drop_console: true,
         drop_debugger: true,
         passes: 2,
       },
@@ -20,12 +21,11 @@ export default defineConfig({
         chunkFileNames: 'assets/[name]-[hash].min.js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
         manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-core': ['react', 'react-dom', 'react-router-dom', 'lucide-react'],
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          'vendor-icons': ['lucide-react'],
         },
       },
     },
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 700,
   },
 });

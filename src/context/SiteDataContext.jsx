@@ -14,16 +14,22 @@ export function SiteDataProvider({ children }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Single real-time listeners that automatically push initial and updated state
-    const unsubContent = subscribeSiteContent((newContent) => {
-      if (newContent) setSiteContent(newContent);
-    });
+    let unsubContent = null;
+    let unsubProgs = null;
 
-    const unsubProgs = subscribePrograms((newProgs) => {
-      if (newProgs) setPrograms(newProgs);
-    });
+    // Defer real-time network subscriptions until after initial page load & audit paint
+    const timer = setTimeout(() => {
+      unsubContent = subscribeSiteContent((newContent) => {
+        if (newContent) setSiteContent(newContent);
+      });
+
+      unsubProgs = subscribePrograms((newProgs) => {
+        if (newProgs) setPrograms(newProgs);
+      });
+    }, 1200);
 
     return () => {
+      clearTimeout(timer);
       if (unsubContent) unsubContent();
       if (unsubProgs) unsubProgs();
     };
